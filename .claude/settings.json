@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "REPO=\"/Users/henrywalton/claude/annas-projects/screenScribe\"; DATE=$(date +%Y-%m-%d); FILE=\"$REPO/docs/changelogs/$DATE.md\"; mkdir -p \"$REPO/docs/changelogs\"; [ -f \"$FILE\" ] || printf '# Changes — %s\\n\\n' \"$(date '+%B %-d, %Y')\" > \"$FILE\"; git -C \"$REPO\" add -A; git -C \"$REPO\" diff --cached --quiet || git -C \"$REPO\" commit -m \"Auto-commit $(date '+%Y-%m-%d %H:%M:%S')\" >/dev/null",
+            "statusMessage": "Updating changelog and committing..."
+          }
+        ]
+      }
+    ]
+  }
+}

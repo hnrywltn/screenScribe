@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #fefefa;   /* Porcelain */
+  --color-surface: #ffffff;
+  --color-sidebar: #333533;      /* Graphite */
+  --color-sidebar-hover: #4a4c49;
+  --color-border: #cfdbd5;       /* Alabaster Grey */
+  --color-text: #333533;         /* Graphite */
+  --color-muted: #7a8c88;
+  --color-accent: #cfdbd5;       /* Alabaster Grey — buttons, links, highlights */
+  --color-accent-hover: #b8c9c3;
+
+  --font-sans: var(--font-geist-sans);
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-sans), Arial, sans-serif;
+}
