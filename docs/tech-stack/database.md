@@ -4,7 +4,7 @@
 - **Driver:** [`pg`](https://node-postgres.com/) (`node-postgres`), raw SQL — **no ORM**
 - **Connection:** `lib/db.ts` — single `Pool` singleton, `connectionString` from `DATABASE_URL` in `.env.local`
 - **Migrations:** no migration framework — `lib/migrate.ts` is one hand-written idempotent script (`CREATE TABLE IF NOT EXISTS`). Run with `npm run migrate`.
-- **Seeding:** none yet — no `lib/seed.ts`.
+- **Seeding:** `lib/seed.ts`, run with `npm run seed`. Dev-only: upserts one known user (`dev@screenscribe.test` / `devpassword123`, hashed via `bcryptjs` directly — deliberately doesn't import `lib/auth.ts`, since that file also exports session helpers that touch `next/headers`, which isn't safe to import outside a Next.js request context). Idempotent — re-running just resets the password.
 
 ## Tables
 

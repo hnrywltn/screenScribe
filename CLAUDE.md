@@ -95,6 +95,8 @@ Two route groups, each with its own layout — introduced alongside auth since l
 - Root `app/layout.tsx` is now minimal — just `<html>`/`<body>`/font, no `Sidebar`, since that's specific to `(app)/layout.tsx` now.
 - `components/Sidebar.tsx`'s "Home" nav link and brand link now point to `/dashboard` (not `/`, which is the public marketing page now) and it gained a "Log out" button (POSTs to `/api/auth/logout`, then `router.push("/")`).
 
+**Dev login:** `npm run seed` upserts a fixed dev account (`dev@screenscribe.test` / `devpassword123`) via `lib/seed.ts` — log in with it at `/login` instead of signing up fresh every time the local DB gets reset. Dev-only seed data, not a bypass in the auth code itself — deliberately didn't hardcode a special-case credential check into `app/api/auth/login/route.ts`, since that's exactly the kind of thing that's dangerous to leave in security-critical code.
+
 ### UI/architecture match, not a data dependency
 
 Visually and structurally mirrors healthReference and patientRecordSystem — same Porcelain/Graphite/Alabaster Grey theme (`app/globals.css`), Geist font, sidebar nav (`components/Sidebar.tsx`), and dashboard "widget" tile pattern (`components/NewSessionWidget.tsx`, `components/SessionsWidget.tsx`). The marketing hero page reuses the same palette rather than introducing new colors, styled with card/tile patterns consistent with the rest of the app (see "Routing structure" above). Unlike patientRecordSystem, **ScreenScribe has no data dependency on either sibling app** — this is purely a stack/UI convention match, not integration. `docs/tech-stack/` here documents ScreenScribe's own (still mostly unbuilt) architecture, not a copy of theirs.
@@ -110,6 +112,7 @@ npm run build        # Production build
 npm run lint         # ESLint
 npx tsc --noEmit     # Type-check without building
 npm run migrate      # Run lib/migrate.ts against DATABASE_URL in .env.local
+npm run seed         # Upsert the dev login (dev@screenscribe.test / devpassword123)
 ```
 
 Worker (separate package — run from `worker/`, not the repo root):
