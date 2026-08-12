@@ -26,7 +26,7 @@ This is the core of what ScreenScribe is supposed to do, and none of it exists y
 - **Transcode** — planned via ffmpeg, not installed on the dev machine yet, no invocation code written
 - **Scene/slide detection** — approach undecided (frame diffing vs. a dedicated scene-detection library)
 - **Transcription** — direction decided (local **whisper.cpp**, shelled out to like ffmpeg — no cloud API, no exceptions, regardless of a provider's stated training policy), model size not chosen, no invocation code written. See `CLAUDE.md` → "Decided: transcription".
-- **Job orchestration** — undecided whether pipeline steps run synchronously in a route handler or via a background worker/queue; video processing is slow enough that synchronous request/response is unlikely to be the final answer, but nothing is built to evaluate yet
+- **Job orchestration** — shape decided, not built: a `pg-boss` (Postgres-backed) job queue, processed by a **second Railway service** acting as the worker, not a synchronous route handler and not a separate VM. Chosen to avoid a new hosting vendor and a new infra dependency (Redis) at this stage. Tradeoff: a generic Railway container has no Metal acceleration, so `whisper.cpp` runs CPU-only there — slower than the local Mac dev environment. See `CLAUDE.md` → "Decided: pipeline orchestration" for what's still open (worker repo layout, how the finished zip crosses back from worker to user, job payload shape).
 
 ## Storage: ephemeral only, by design
 

@@ -46,6 +46,18 @@ A **paid service** — per-video or subscription (not decided which, or both). T
 
 **Email + password**, not OAuth or magic-link — keeps credential storage in-house rather than round-tripping logins through a third-party identity provider, consistent with the local-processing-only stance above. `users` table exists (`email`, `password_hash`) but **login/signup pages, password hashing wiring, and session/cookie handling are not built yet**.
 
+### Decided: pipeline orchestration (2026-08-12)
+
+**A separate background worker service, not a synchronous request handler.** Real videos take minutes to transcode/detect-scenes/transcribe — well past any reasonable HTTP/reverse-proxy timeout, and a held-open request has no way to show progress and loses the job entirely on a server restart.
+
+- **Job queue: `pg-boss`** (Postgres-backed) rather than Redis-backed (BullMQ, etc.) — reuses the Postgres already in the stack instead of adding a second infrastructure dependency. `sessions.status` is the natural place to reflect job progress (free-text column, no schema change needed to add intermediate values like `transcoding`/`detecting_scenes`/`transcribing` later if per-stage progress is wanted).
+- **Worker host: a second Railway service**, not a standalone VM (Hetzner/DO/AWS/etc.) — chosen as the starting point specifically to avoid standing up a new hosting vendor, and because it's a platform already known here. It's a plain Linux container, so `whisper.cpp` runs **CPU-only, no Metal acceleration** — meaningfully slower than the Mac dev machine. Revisit a dedicated box (e.g. AWS EC2 Mac instances, for Metal-accelerated `whisper.cpp` in the cloud) only if transcription speed becomes a real problem under actual usage — not a preemptive optimization.
+
+**Repo layout decided:** the worker lives in **this repo**, in a new `worker/` directory alongside `app/`, `lib/`, `components/` — deployed as a second Railway service from the same codebase, not split into a separate repo. Not scaffolded yet.
+
+**Still open, don't guess at this:**
+- How the finished zip actually reaches the user, since the worker — not the web app's request handler — is what produces it: the worker could serve a short-lived one-time download link itself, or hand the finished file back to the web app to stream out. Either way it has to happen without ever writing the zip to durable storage, per "Decided: storage & retention" above.
+
 ### Local development database
 
 Local Postgres (Homebrew, same server already running for healthReference/patientRecordSystem) hosts a `screenscribe` database — same server process, separate database, no shared schema with the other two apps. Connection string is in `.env.local` (gitignored): `DATABASE_URL=postgres://henrywalton@localhost:5432/screenscribe`. Run `npm run migrate` after pulling schema changes; it's idempotent (`CREATE TABLE IF NOT EXISTS`), safe to re-run.
@@ -59,7 +71,7 @@ Local Postgres (Homebrew, same server already running for healthReference/patien
 
 **Deliberately not built yet — don't assume these exist or guess at their shape:**
 
-- **The processing pipeline itself.** No ffmpeg invocation, no scene/slide-change detection algorithm, no whisper.cpp integration, no job orchestration (synchronous request vs. background worker/queue) connecting them, no ephemeral-temp-dir-then-zip-then-delete logic actually written yet. `ffmpeg` is not even installed on this machine (`which ffmpeg` found nothing).
+- **The processing pipeline itself.** No ffmpeg invocation, no scene/slide-change detection algorithm, no whisper.cpp integration, no `pg-boss` wiring, no worker service scaffolded, no ephemeral-temp-dir-then-zip-then-delete logic actually written yet. `ffmpeg` is not even installed on this machine (`which ffmpeg` found nothing). Orchestration *shape* is decided (see "Decided: pipeline orchestration") — none of it is built.
 - **Auth implementation** — mechanism is decided (email+password) but no signup/login pages, no password hashing wired up, no session/cookie handling. `sessions.user_id` can't actually be populated by anything yet.
 - **Billing/payment integration** — business model is "paid" but Stripe (or any provider), pricing, and the plan/credit shape are all undecided. Don't invent a `plans` or `credits` table.
 
