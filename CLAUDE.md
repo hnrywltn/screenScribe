@@ -4,16 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Early build — stack scaffolded, schema migrated to a local dev DB, no processing pipeline yet.** Next.js/TypeScript app mirroring healthReference's and patientRecordSystem's stack (see "Decided: stack" below). Home dashboard and sessions list are wired to a real database (`sessions` table, currently empty). The actual video pipeline — transcode, scene detection, transcription — is **not implemented**, only its data model. See "Still open" below before assuming anything works end to end.
+**Early build — stack scaffolded, schema migrated to a local dev DB, no processing pipeline yet.** Next.js/TypeScript app mirroring healthReference's and patientRecordSystem's stack (see "Decided: stack" below). Home dashboard and sessions list are wired to a real database. The actual video pipeline — transcode, scene detection, transcription — is **not implemented**, only its data model. See "Deliberately not built yet" under "Data model" below before assuming anything works end to end.
 
 ## Project
 
-**ScreenScribe** — a user uploads a recorded presentation/lecture video (commonly `.mov`, but should accept multiple formats). The app processes it into a structured, downloadable package:
+**ScreenScribe** — a paid service (per-video or subscription — see "Decided: business model" below). A user uploads a recorded presentation/lecture video (commonly `.mov`, but should accept multiple formats). The app processes it into a package they download **once**:
 
 1. Screenshots of each new/distinct slide or screen shown in the video
-2. A full transcript of the audio (via Whisper)
+2. A full transcript of the audio (via a locally-run Whisper — see "Decided: transcription")
 3. The original video converted to `.mp4`
-4. All outputs organized into a clean per-session directory, downloadable individually or as a bundle (zip)
+4. All three bundled into a single zip, streamed back as the download
 
 **Target users:** initially either healthcare professionals needing documentation for continuing-education (CE) courses, or college students wanting lecture notes/study material — market decision still open.
 
@@ -23,31 +23,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 2. **Transcode** — convert to `.mp4` (likely via ffmpeg)
 3. **Scene/slide detection** — detect "new screen" moments (frame diffing or scene-change detection), extract screenshots at those points, avoid duplicate/near-duplicate frames
 4. **Transcription** — run audio through Whisper (local or API) to generate a timestamped transcript
-5. **Packaging** — organize output per session: `/session_id/video.mp4`, `/session_id/screenshots/`, `/session_id/transcript.txt` (or `.srt`/`.vtt` for timestamp alignment)
-6. **Delivery** — downloadable via the web UI, individually or as a zip
+5. **Packaging** — zip the transcoded video, screenshots, and transcript (`.txt` or `.srt`/`.vtt`) together in an ephemeral temp directory
+6. **Delivery** — stream the zip back to the browser as a one-time download, then delete the temp directory. Nothing is kept — see "Decided: storage & retention"
 
 ### Decided: stack (2026-08-07)
 
 Mirrors healthReference's (`../momsProject`) and patientRecordSystem's (`../patientRecordsSystem`) stack, for consistency across the three Light Patterns apps: **Next.js 16 (App Router) + TypeScript + React 19 + Tailwind CSS v4 + raw SQL via `pg`, no ORM**, one hand-written idempotent `lib/migrate.ts`.
 
+### Decided: business model (2026-08-12)
+
+A **paid service** — per-video or subscription (not decided which, or both). This is the actual reason storage stays minimal (below): every video/screenshot/transcript kept around is cost that doesn't scale, not just a privacy nice-to-have. **Billing/payment integration (Stripe or otherwise, pricing, plan vs. metered-credit shape) is not decided and not built** — don't assume a `plans`/`subscriptions`/`credits` table exists or guess at one. `sessions` rows (see "Data model" below) are the only thing usage-tracking currently has to work with.
+
+### Decided: storage & retention (2026-08-12)
+
+**Nothing persists past the download.** A user's video, the extracted screenshots, and the transcript live only in an ephemeral temp directory for the duration of processing; once the zip is built and streamed back to the browser, that directory is deleted — success or failure. There is **no re-download** and no persistent object storage (no R2/B2/S3 needed at all, unlike healthReference/patientRecordSystem) — this replaces the earlier "file storage backend TBD" open item entirely, it's not TBD anymore, it's "there isn't one." All that persists in Postgres is the lightweight `sessions` usage-log row (filename, status, timestamp) — see "Data model" below.
+
+### Decided: transcription (2026-08-12)
+
+**Local Whisper only — no cloud transcription API**, regardless of any provider's stated training/retention policy. Users' video content should never leave the machine it's processed on. Leaning **whisper.cpp** (C++ port, no Python dependency, Metal-accelerated on Apple Silicon) invoked as a local binary the same way ffmpeg will be — fits the existing "shell out to a local tool" shape rather than introducing Python or a persistent model-serving process. Model size (tiny/base/small/medium/large — speed vs. accuracy) not yet chosen. **Not implemented yet** — this is the decided direction, not working code.
+
+### Decided: auth mechanism (2026-08-12)
+
+**Email + password**, not OAuth or magic-link — keeps credential storage in-house rather than round-tripping logins through a third-party identity provider, consistent with the local-processing-only stance above. `users` table exists (`email`, `password_hash`) but **login/signup pages, password hashing wiring, and session/cookie handling are not built yet**.
+
 ### Local development database
 
 Local Postgres (Homebrew, same server already running for healthReference/patientRecordSystem) hosts a `screenscribe` database — same server process, separate database, no shared schema with the other two apps. Connection string is in `.env.local` (gitignored): `DATABASE_URL=postgres://henrywalton@localhost:5432/screenscribe`. Run `npm run migrate` after pulling schema changes; it's idempotent (`CREATE TABLE IF NOT EXISTS`), safe to re-run.
 
-### Data model — what exists vs. what's still open (2026-08-07)
+### Data model — what exists vs. what's still open (2026-08-12)
 
-`lib/migrate.ts` currently covers only the schema needed to *record* a session's outputs, not produce them:
+`lib/migrate.ts` covers only two tables, deliberately thin given "Decided: storage & retention" above — there's no media to reference, so there's nothing resembling the earlier `screenshots`/`transcript_segments` tables (removed, not just unused):
 
-- `sessions` — one row per uploaded video: `name`, `original_filename`, `status` (uploaded / transcoding / detecting_scenes / transcribing / packaging / complete / failed), `video_key`, `error_message`, timestamps
-- `screenshots` — one row per detected distinct slide/screen: `session_id`, `image_key`, `timestamp_seconds`, `ordinal`
-- `transcript_segments` — one row per Whisper segment, timestamp-aligned: `session_id`, `start_seconds`, `end_seconds`, `text`, `ordinal`
+- `users` — `email` (unique), `password_hash`, `created_at`. For the future email+password auth — see "Decided: auth mechanism".
+- `sessions` — a usage **log**, not a record of output: `user_id` (FK → `users`, `NOT NULL`), `original_filename`, `status` (`processing` / `complete` / `failed`), `error_message`, timestamps. No `video_key`/`image_key`/anything pointing at stored content, because nothing is stored. Currently unfiltered by user on `app/sessions/page.tsx` since there's no login session to filter by yet.
 
 **Deliberately not built yet — don't assume these exist or guess at their shape:**
 
-- **The processing pipeline itself.** No ffmpeg invocation, no scene/slide-change detection algorithm, no Whisper integration, no job orchestration (synchronous request vs. background worker/queue) connecting them. Only the schema that will eventually record their output exists. `ffmpeg` is not even installed on this machine yet (`which ffmpeg` found nothing) — needed before any transcode work starts.
-- **File storage backend** for uploaded videos, transcoded mp4s, and extracted screenshots — R2 (like healthReference), B2 (like patientRecordSystem's planned PHI storage), or local disk are all on the table. `video_key`/`image_key` columns are storage-agnostic strings so this can be decided later without a schema change.
-- **Zip bundling / download delivery** — not implemented.
-- **Auth** — none yet, single-user local tool for now, same starting point as the other two apps.
+- **The processing pipeline itself.** No ffmpeg invocation, no scene/slide-change detection algorithm, no whisper.cpp integration, no job orchestration (synchronous request vs. background worker/queue) connecting them, no ephemeral-temp-dir-then-zip-then-delete logic actually written yet. `ffmpeg` is not even installed on this machine (`which ffmpeg` found nothing).
+- **Auth implementation** — mechanism is decided (email+password) but no signup/login pages, no password hashing wired up, no session/cookie handling. `sessions.user_id` can't actually be populated by anything yet.
+- **Billing/payment integration** — business model is "paid" but Stripe (or any provider), pricing, and the plan/credit shape are all undecided. Don't invent a `plans` or `credits` table.
 
 ### UI/architecture match, not a data dependency
 

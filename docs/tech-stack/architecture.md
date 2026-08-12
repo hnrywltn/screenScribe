@@ -17,7 +17,7 @@
 
 ## Auth
 
-**None.** Single-user local tool at this stage, same starting point as healthReference and patientRecordSystem.
+**Mechanism decided (email + password), not implemented.** `users` table exists; no signup/login pages, no password hashing wired up, no session/cookie handling yet. See `CLAUDE.md` → "Decided: auth mechanism".
 
 ## The processing pipeline — not implemented
 
@@ -25,12 +25,12 @@ This is the core of what ScreenScribe is supposed to do, and none of it exists y
 
 - **Transcode** — planned via ffmpeg, not installed on the dev machine yet, no invocation code written
 - **Scene/slide detection** — approach undecided (frame diffing vs. a dedicated scene-detection library)
-- **Transcription** — planned via Whisper, local-model vs. API undecided
+- **Transcription** — direction decided (local **whisper.cpp**, shelled out to like ffmpeg — no cloud API, no exceptions, regardless of a provider's stated training policy), model size not chosen, no invocation code written. See `CLAUDE.md` → "Decided: transcription".
 - **Job orchestration** — undecided whether pipeline steps run synchronously in a route handler or via a background worker/queue; video processing is slow enough that synchronous request/response is unlikely to be the final answer, but nothing is built to evaluate yet
 
-## File storage
+## Storage: ephemeral only, by design
 
-**Not decided.** `sessions.video_key` and `screenshots.image_key` are storage-agnostic string columns (mirroring healthReference's `attachments.file_key` pattern) so the backend — Cloudflare R2 (healthReference), Backblaze B2 (patientRecordSystem), or local disk — can be chosen later without a schema change.
+**Not "undecided" — deliberately nothing.** Earlier drafts of this doc had a "file storage backend TBD" section (R2 vs. B2 vs. local disk). That question no longer applies: nothing produced by the pipeline is kept past the response. The plan is a per-job temp directory (raw upload, extracted frames, transcoded mp4, transcript) that gets deleted — success or failure — once the zip has been streamed back to the browser. No S3-compatible client, no `video_key`/`image_key` columns (removed from the schema entirely, not left nullable for later). See `CLAUDE.md` → "Decided: storage & retention" and `database.md`.
 
 ## Styling
 
@@ -43,4 +43,4 @@ Tooltip/coachmark-style tour via `driver.js`, triggered from the button on the h
 
 ## Data model shape
 
-Three tables so far, all scoped under one `sessions` row per uploaded video: `screenshots` and `transcript_segments` both hold `session_id` foreign keys with `ON DELETE CASCADE`. See [`database.md`](./database.md). No generic cross-entity relationship table like healthReference/patientRecordSystem — there's only one primary concept (a session) so far, nothing to cross-link yet.
+Two tables: `users` and `sessions` (a usage log, `user_id` FK). See [`database.md`](./database.md). No generic cross-entity relationship table like healthReference/patientRecordSystem — there's nothing to cross-link, `sessions` doesn't reference any stored output.

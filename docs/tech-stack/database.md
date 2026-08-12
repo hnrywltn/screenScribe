@@ -8,12 +8,13 @@
 
 ## Tables
 
-- `sessions` — one row per uploaded video: `id` (UUID PK), `name`, `original_filename`, `status` (`uploaded` / `transcoding` / `detecting_scenes` / `transcribing` / `packaging` / `complete` / `failed`), `video_key` (nullable — set once transcoding finishes), `error_message`, `created_at`/`updated_at`
-- `screenshots` — one row per detected distinct slide/screen: `id` (UUID PK), `session_id` (FK → `sessions`, `ON DELETE CASCADE`), `image_key`, `timestamp_seconds`, `ordinal`, `created_at`. Indexed on `session_id`.
-- `transcript_segments` — one row per Whisper transcript segment: `id` (UUID PK), `session_id` (FK → `sessions`, `ON DELETE CASCADE`), `start_seconds`, `end_seconds`, `text`, `ordinal`, `created_at`. Indexed on `session_id`.
+Just two — deliberately thin. See `CLAUDE.md` → "Decided: storage & retention": nothing about a processed video persists, so there's no media table to design.
+
+- `users` — `id` (UUID PK), `email` (unique), `password_hash`, `created_at`. For the planned email+password auth (see `CLAUDE.md` → "Decided: auth mechanism") — no login/signup code uses it yet.
+- `sessions` — a **usage log**, not a record of output: `id` (UUID PK), `user_id` (FK → `users`, `ON DELETE CASCADE`, `NOT NULL`), `original_filename`, `status` (`processing` / `complete` / `failed`), `error_message`, `created_at`/`updated_at`. Indexed on `user_id`. No `video_key`/`image_key`/anything pointing at stored content.
 
 ## Notable patterns
 
-- No row-level auth/permissions — single-user, no multi-tenancy, same as healthReference and patientRecordSystem at their equivalent early stage.
-- `video_key`/`image_key` are plain `TEXT` — storage-agnostic, no assumption baked in about R2/B2/local disk (see [`architecture.md`](./architecture.md)).
-- Nothing currently writes to these tables outside `lib/migrate.ts` — no upload/processing code exists yet, so in a fresh checkout all three tables are empty.
+- No row-level auth/permissions enforced yet — `sessions.user_id` is `NOT NULL` (the intended final shape) but nothing currently populates it, since there's no login flow to attach a session to. `app/sessions/page.tsx` queries all sessions unfiltered until that exists.
+- **Previously had `screenshots` and `transcript_segments` tables** (one row per detected slide, one per transcript segment) — removed 2026-08-12 when the storage model changed from "keep the output, let users re-download" to "one-time download, nothing kept." Pre-launch with no real data in either table, so `lib/migrate.ts` was rewritten directly rather than layering `DROP TABLE` statements on top of the old shape — see `docs/changelogs/2026-08-12.md`.
+- Nothing currently writes to either table outside `lib/migrate.ts` — no signup or upload code exists yet, so in a fresh checkout both tables are empty.
