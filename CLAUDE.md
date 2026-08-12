@@ -40,7 +40,12 @@ A **paid service** — per-video or subscription (not decided which, or both). T
 
 ### Decided: transcription (2026-08-12)
 
-**Local Whisper only — no cloud transcription API**, regardless of any provider's stated training/retention policy. Users' video content should never leave the machine it's processed on. Leaning **whisper.cpp** (C++ port, no Python dependency, Metal-accelerated on Apple Silicon) invoked as a local binary the same way ffmpeg will be — fits the existing "shell out to a local tool" shape rather than introducing Python or a persistent model-serving process. Model size (tiny/base/small/medium/large — speed vs. accuracy) not yet chosen. **Not implemented yet** — this is the decided direction, not working code.
+**Local Whisper only — no cloud transcription API**, regardless of any provider's stated training/retention policy. Users' video content should never leave the machine it's processed on. **whisper.cpp** (C++ port, no Python dependency, Metal-accelerated on Apple Silicon) invoked as a local binary the same way ffmpeg is — fits the existing "shell out to a local tool" shape rather than introducing Python or a persistent model-serving process.
+
+**Model size: `medium`** (2026-08-12) — chosen after working through actual cost/speed numbers, not guessed at:
+- Railway bills compute at ~$0.0009/vCPU+2GB-minute. Even the slowest realistic model choice landed around $0.02–0.03 of compute per 30-minute video — marginal transcription cost turned out to not be the pricing bottleneck at all (the fixed monthly cost of keeping a worker running dominates at low volume, not per-video compute). That freed up the model choice to prioritize accuracy over squeezing out the cheapest/fastest option.
+- **Must run quantized (e.g. INT4/`q4`-class ggml weights), not full FP16** — benchmark data: FP16 `medium` runs *slower* than real-time on CPU (~1.8×), which would make a 30-minute video take ~54 minutes to transcribe; the quantized variant is faster than real-time (RTF ≈ 0.76, ~23 minutes for the same video). Exact quantization level (`q4_0` vs `q5_0` etc.) not pinned yet — a call to make once whisper.cpp is actually being installed and models compared for accuracy loss, not a business decision.
+- Not implemented yet — this is the decided model choice, not working code. No whisper.cpp binary or model file exists on this machine yet.
 
 ### Decided: auth mechanism (2026-08-12) — built
 
