@@ -24,7 +24,12 @@ Not yet added, needed once the pipeline is built: a way to shell out to ffmpeg a
 | `pg` | ^8.23.0 | Same role as the root package's `pg` — raw Postgres driver, no ORM |
 | `dotenv` | ^17.4.2 | Loads `worker/.env.local` (mirrors the root's `lib/migrate.ts` pattern) |
 
-Dev: `typescript` ^7.0.2, `tsx` ^4.23.12 (runs `index.ts` directly, no build step — `npm run dev` uses `tsx watch`), `@types/node` ^26.2.0, `@types/pg` ^8.21.0. **Note the version gap from the root package** (`typescript` ^5, `@types/node` ^20) — resolved independently since `npm install` was run separately inside `worker/`, not a deliberate pin. Not yet added: ffmpeg/whisper.cpp invocation, a zip library — same gap as the root package, since the pipeline itself isn't built.
+Dev: `typescript` ^7.0.2, `tsx` ^4.23.12 (runs `index.ts` directly, no build step — `npm run dev` uses `tsx watch`), `@types/node` ^26.2.0, `@types/pg` ^8.21.0. **Note the version gap from the root package** (`typescript` ^5, `@types/node` ^20) — resolved independently since `npm install` was run separately inside `worker/`, not a deliberate pin. Not yet added: whisper.cpp invocation, a zip library.
+
+### System dependencies (not npm packages)
+
+- **`ffmpeg`** (v9.0) — installed via Homebrew (`brew install ffmpeg`), **not** an npm dependency, so it doesn't show up in either `package.json`. `worker/lib/ffmpeg.ts` shells out to the `ffmpeg`/`ffprobe` binaries on `PATH`. Installed manually on this dev machine only — the worker's eventual Railway build needs its own step to install it there too (not set up yet, e.g. a `nixpacks.toml` or `apt-get install ffmpeg` in a Dockerfile).
+- **`whisper.cpp`** — planned, not installed yet. See `CLAUDE.md` → "Decided: transcription".
 
 ## Dev dependencies
 
