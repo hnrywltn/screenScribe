@@ -55,8 +55,7 @@ A **paid service** — per-video or subscription (not decided which, or both). T
 
 **Repo layout decided:** the worker lives in **this repo**, in a new `worker/` directory alongside `app/`, `lib/`, `components/` — deployed as a second Railway service from the same codebase, not split into a separate repo. Not scaffolded yet.
 
-**Still open, don't guess at this:**
-- How the finished zip actually reaches the user, since the worker — not the web app's request handler — is what produces it: the worker could serve a short-lived one-time download link itself, or hand the finished file back to the web app to stream out. Either way it has to happen without ever writing the zip to durable storage, per "Decided: storage & retention" above.
+**File handoff decided:** once a job finishes, the worker sends the finished zip to the web app over **Railway's private internal networking**, and the web app streams it to the browser — the worker never serves a public download itself. Chosen over the worker exposing its own public one-time-link endpoint because it means the worker (the service actually running ffmpeg/whisper.cpp on user-uploaded video) never needs to accept public internet traffic at all — smaller attack surface — and the client only ever talks to one origin (no CORS, one TLS cert to manage). The tradeoff (an extra hop for the file) is a private in-datacenter transfer, not a real cost, unlike a second public round-trip would be. The zip still touches disk only in each service's own ephemeral temp space — never written anywhere durable. Not implemented yet.
 
 ### Local development database
 
