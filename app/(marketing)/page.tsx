@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Camera, FileText, Film, Lock } from "lucide-react";
 import FeatureCard from "@/components/FeatureCard";
 import PricingCard from "@/components/PricingCard";
+import TokenEstimator from "@/components/TokenEstimator";
 
 export default function MarketingHomePage() {
   return (
@@ -69,22 +70,31 @@ export default function MarketingHomePage() {
       <section id="pricing" className="max-w-5xl mx-auto px-4 sm:px-8 py-16">
         <div className="text-center mb-10">
           <h2 className="text-2xl font-semibold text-[var(--color-text)]">Pricing</h2>
-          <p className="mt-2 text-sm text-[var(--color-muted)]">
-            First pass at pricing — may change as we learn more from real usage.
+          <p className="mt-2 text-sm text-[var(--color-muted)] max-w-xl mx-auto">
+            Token-based — 1 token ≈ 1 minute of video processed, rounded up. No unlimited plan, on purpose: it keeps
+            processing fast and reliable for everyone instead of a few heavy users slowing it down for the rest.
+            Because nothing is stored and nothing trains an AI model, there&apos;s no hidden data business subsidizing
+            the price — you&apos;re paying for compute, plainly. First pass at pricing — may change as we learn more
+            from real usage.
           </p>
         </div>
+
+        <div className="mb-10">
+          <TokenEstimator />
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-2xl mx-auto">
           <PricingCard
-            title="Pay per video"
-            price="$6"
-            period="/ video"
-            description="Good for occasional use — pay only for what you process."
+            title="Pay as you go"
+            price="$0.20"
+            period="/ token"
+            description="Buy tokens as you need them. 1 token processes about 1 minute of video."
           />
           <PricingCard
-            title="Unlimited"
+            title="Subscription"
             price="$15"
             period="/ month"
-            description="Best for regular use — process as many recordings as you need."
+            description="100 tokens included every month — about 25% off buying the same tokens individually."
           />
         </div>
       </section>
