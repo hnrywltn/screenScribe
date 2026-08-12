@@ -53,9 +53,11 @@ A **paid service** — per-video or subscription (not decided which, or both). T
 - **Job queue: `pg-boss`** (Postgres-backed) rather than Redis-backed (BullMQ, etc.) — reuses the Postgres already in the stack instead of adding a second infrastructure dependency. `sessions.status` is the natural place to reflect job progress (free-text column, no schema change needed to add intermediate values like `transcoding`/`detecting_scenes`/`transcribing` later if per-stage progress is wanted).
 - **Worker host: a second Railway service**, not a standalone VM (Hetzner/DO/AWS/etc.) — chosen as the starting point specifically to avoid standing up a new hosting vendor, and because it's a platform already known here. It's a plain Linux container, so `whisper.cpp` runs **CPU-only, no Metal acceleration** — meaningfully slower than the Mac dev machine. Revisit a dedicated box (e.g. AWS EC2 Mac instances, for Metal-accelerated `whisper.cpp` in the cloud) only if transcription speed becomes a real problem under actual usage — not a preemptive optimization.
 
-**Repo layout decided:** the worker lives in **this repo**, in a new `worker/` directory alongside `app/`, `lib/`, `components/` — deployed as a second Railway service from the same codebase, not split into a separate repo. Not scaffolded yet.
+**Repo layout decided:** the worker lives in **this repo**, in a `worker/` directory alongside `app/`, `lib/`, `components/` — deployed as a second Railway service from the same codebase, not split into a separate repo.
 
 **File handoff decided:** once a job finishes, the worker sends the finished zip to the web app over **Railway's private internal networking**, and the web app streams it to the browser — the worker never serves a public download itself. Chosen over the worker exposing its own public one-time-link endpoint because it means the worker (the service actually running ffmpeg/whisper.cpp on user-uploaded video) never needs to accept public internet traffic at all — smaller attack surface — and the client only ever talks to one origin (no CORS, one TLS cert to manage). The tradeoff (an extra hop for the file) is a private in-datacenter transfer, not a real cost, unlike a second public round-trip would be. The zip still touches disk only in each service's own ephemeral temp space — never written anywhere durable. Not implemented yet.
+
+**Worker scaffolded (2026-08-12):** `worker/` is a real, separate npm package — its own `package.json`/`tsconfig.json`/`.env.local`, **not** part of the root Next.js project (root `tsconfig.json` and `eslint.config.mjs` both explicitly exclude it — the two packages have diverging dependency versions, e.g. different `@types/node` majors, and shouldn't be typechecked/linted as one program). `worker/index.ts` connects to Postgres, starts `pg-boss`, creates a `process-session` queue, and registers a handler — verified end-to-end locally (sent a real job via `boss.send()`, confirmed the worker received and completed it, confirmed graceful shutdown on `SIGTERM`). **The handler is a stub** — it logs receipt and does nothing else. Nothing enqueues real jobs yet (no upload endpoint in the web app calls `boss.send()`), and none of ffmpeg/scene-detection/whisper.cpp/zip-and-handback is wired in. Run it locally with `cd worker && npm install && npm run dev`.
 
 ### Local development database
 
@@ -70,7 +72,7 @@ Local Postgres (Homebrew, same server already running for healthReference/patien
 
 **Deliberately not built yet — don't assume these exist or guess at their shape:**
 
-- **The processing pipeline itself.** No ffmpeg invocation, no scene/slide-change detection algorithm, no whisper.cpp integration, no `pg-boss` wiring, no worker service scaffolded, no ephemeral-temp-dir-then-zip-then-delete logic actually written yet. `ffmpeg` is not even installed on this machine (`which ffmpeg` found nothing). Orchestration *shape* is decided (see "Decided: pipeline orchestration") — none of it is built.
+- **The processing pipeline itself.** `worker/` exists and can receive/complete a job (see "Decided: pipeline orchestration" → "Worker scaffolded"), but its handler is a stub — no ffmpeg invocation, no scene/slide-change detection algorithm, no whisper.cpp integration, no ephemeral-temp-dir-then-zip-then-handback logic. `ffmpeg` is not even installed on this machine (`which ffmpeg` found nothing). Nothing in the web app creates real jobs yet either — no upload endpoint calls `boss.send()`.
 - **Auth implementation** — mechanism is decided (email+password) but no signup/login pages, no password hashing wired up, no session/cookie handling. `sessions.user_id` can't actually be populated by anything yet.
 - **Billing/payment integration** — business model is "paid" but Stripe (or any provider), pricing, and the plan/credit shape are all undecided. Don't invent a `plans` or `credits` table.
 
@@ -80,6 +82,8 @@ Visually and structurally mirrors healthReference and patientRecordSystem — sa
 
 ## Commands
 
+Web app (run from repo root):
+
 ```bash
 npm install         # Install dependencies
 npm run dev          # Start dev server at http://localhost:3000
@@ -87,6 +91,15 @@ npm run build        # Production build
 npm run lint         # ESLint
 npx tsc --noEmit     # Type-check without building
 npm run migrate      # Run lib/migrate.ts against DATABASE_URL in .env.local
+```
+
+Worker (separate package — run from `worker/`, not the repo root):
+
+```bash
+cd worker
+npm install          # Install dependencies (own node_modules, not shared with root)
+npm run dev           # Start the worker (tsx watch), connects to DATABASE_URL in worker/.env.local
+npx tsc --noEmit      # Type-check
 ```
 
 ## Working here

@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Separate deployable package with its own tsconfig/deps — not part
+    // of the Next.js app's lint scope.
+    "worker/**",
   ]),
 ]);
 

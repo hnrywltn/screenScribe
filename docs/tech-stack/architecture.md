@@ -7,6 +7,10 @@
 - `lib/` — shared server code (`db.ts`, `migrate.ts`)
 - `components/` — UI components
 
+## Worker package (`worker/`)
+
+A **separate npm package**, not part of the Next.js app — own `package.json`, `tsconfig.json`, `.env.local`, `node_modules`. Root `tsconfig.json` (`exclude: ["node_modules", "worker"]`) and `eslint.config.mjs` (`globalIgnores: [..., "worker/**"]`) both explicitly exclude it, so `npx tsc --noEmit`/`npx eslint .` run from the repo root never touch it and vice versa — the two packages have diverging dependency versions (e.g. root's `@types/node ^20` vs. the worker's `^26`) and shouldn't be typechecked as one program. Run its own checks from inside `worker/`. See "The processing pipeline" below for what it does.
+
 ## ORM
 
 **None.** Database access is raw SQL via the `pg` driver (`lib/db.ts`), matching healthReference and patientRecordSystem. See [`database.md`](./database.md).
@@ -26,7 +30,7 @@ This is the core of what ScreenScribe is supposed to do, and none of it exists y
 - **Transcode** — planned via ffmpeg, not installed on the dev machine yet, no invocation code written
 - **Scene/slide detection** — approach undecided (frame diffing vs. a dedicated scene-detection library)
 - **Transcription** — direction decided (local **whisper.cpp**, shelled out to like ffmpeg — no cloud API, no exceptions, regardless of a provider's stated training policy), model size not chosen, no invocation code written. See `CLAUDE.md` → "Decided: transcription".
-- **Job orchestration** — shape decided, not built: a `pg-boss` (Postgres-backed) job queue, processed by a **second Railway service** acting as the worker (lives in this repo, in a new `worker/` directory — not a separate repo), not a synchronous route handler and not a separate VM. Chosen to avoid a new hosting vendor and a new infra dependency (Redis) at this stage. Tradeoff: a generic Railway container has no Metal acceleration, so `whisper.cpp` runs CPU-only there — slower than the local Mac dev environment.
+- **Job orchestration** — a `pg-boss` (Postgres-backed) job queue, processed by a **second Railway service** acting as the worker, not a synchronous route handler and not a separate VM. Chosen to avoid a new hosting vendor and a new infra dependency (Redis) at this stage. Tradeoff: a generic Railway container has no Metal acceleration, so `whisper.cpp` runs CPU-only there — slower than the local Mac dev environment. **Scaffolded**: `worker/` (this repo, own `package.json`/`tsconfig.json`/`.env.local` — deliberately excluded from the root project's `tsconfig.json`/`eslint.config.mjs`, see "Worker package" below) connects to Postgres, starts `pg-boss`, creates a `process-session` queue, and has a handler registered. Verified locally end-to-end (job sent → received → completed, clean shutdown on `SIGTERM`). The handler itself is a stub — logs receipt, does nothing else.
 - **File handoff** — the finished zip crosses from worker back to web app over **Railway's private internal networking**; the web app streams it to the browser, the worker never serves a public download. Keeps the worker (the service running ffmpeg/whisper.cpp on user-uploaded video) off the public internet entirely, and keeps the client talking to a single origin. See `CLAUDE.md` → "Decided: pipeline orchestration".
 
 ## Storage: ephemeral only, by design
