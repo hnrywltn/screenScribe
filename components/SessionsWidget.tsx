@@ -5,6 +5,7 @@ export default function SessionsWidget({ sessionCount }: { sessionCount: number 
   return (
     <Link
       href="/sessions"
+      data-tour="sessions-widget"
       className="h-56 bg-white rounded-3xl border border-[var(--color-border)] shadow-sm hover:shadow-md transition-shadow p-5 flex flex-col justify-between"
     >
       <div className="flex items-start justify-between">

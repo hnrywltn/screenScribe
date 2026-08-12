@@ -10,6 +10,7 @@ As of the versions pinned in `package.json`. Run `npm ls <pkg>` or check `packag
 | `react` / `react-dom` | 19.2.4 | UI rendering |
 | `pg` | ^8.20.0 | Raw Postgres driver — no ORM. See [`database.md`](./database.md) |
 | `lucide-react` | ^1.8.0 | Icon set used throughout the UI |
+| `driver.js` | ^1.8.0 | Powers the "Tutorial" button's guided tour (tooltip/coachmark style) on the home page — see `components/TutorialButton.tsx`. Loaded via dynamic `import()` inside the click handler so it isn't in the initial page bundle; its CSS is statically imported and reskinned in `app/globals.css` to match the app palette instead of the library's default blue/white theme. |
 
 Not yet added, needed once the pipeline is built: an ffmpeg wrapper (or a shell-out), a Whisper client (local or API), a zip library for bundled downloads, and whatever file-storage SDK matches the chosen backend (`@aws-sdk/client-s3` for R2/B2-style storage, as used by healthReference/patientRecordSystem, if that's the direction chosen).
 

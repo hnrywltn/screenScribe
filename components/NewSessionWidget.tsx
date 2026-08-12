@@ -5,6 +5,7 @@ export default function NewSessionWidget() {
   return (
     <Link
       href="/upload"
+      data-tour="new-session"
       className="h-56 rounded-3xl bg-[var(--color-sidebar)] hover:bg-[var(--color-sidebar-hover)] transition-colors p-5 flex flex-col justify-between text-white"
     >
       <Upload className="w-6 h-6 text-white/70" />
