@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**ScreenScribe** — a paid service (per-video or subscription — see "Decided: business model" below). A user uploads a recorded presentation/lecture video (commonly `.mov`, but should accept multiple formats). The app processes it into a package they download **once**:
+**ScreenScribe** — a paid service (per-video **and** subscription options — see "Decided: business model" below). A user uploads a recorded presentation/lecture video (commonly `.mov`, but should accept multiple formats). The app processes it into a package they download **once**:
 
 1. Screenshots of each new/distinct slide or screen shown in the video
 2. A full transcript of the audio (via a locally-run Whisper — see "Decided: transcription")
@@ -32,7 +32,9 @@ Mirrors healthReference's (`../momsProject`) and patientRecordSystem's (`../pati
 
 ### Decided: business model (2026-08-12)
 
-A **paid service** — per-video or subscription (not decided which, or both). This is the actual reason storage stays minimal (below): every video/screenshot/transcript kept around is cost that doesn't scale, not just a privacy nice-to-have. **Billing/payment integration (Stripe or otherwise, pricing, plan vs. metered-credit shape) is not decided and not built** — don't assume a `plans`/`subscriptions`/`credits` table exists or guess at one. `sessions` rows (see "Data model" below) are the only thing usage-tracking currently has to work with.
+A **paid service** — **both** per-video and subscription, not one or the other. This is the actual reason storage stays minimal (below): every video/screenshot/transcript kept around is cost that doesn't scale, not just a privacy nice-to-have. **Billing/payment integration (Stripe or otherwise, plan vs. metered-credit shape) is not decided and not built** — don't assume a `plans`/`subscriptions`/`credits` table exists or guess at one. `sessions` rows (see "Data model" below) are the only thing usage-tracking currently has to work with.
+
+**First-pass pricing (2026-08-12):** $6/video, $15/month unlimited — shown on the hero page (`app/(marketing)/page.tsx`), copy-labeled "First pass at pricing — may change." Landed there by anchoring against real comparables (Otter.ai Pro ~$8–17/mo, Rev.com $0.25/min AI transcription, Descript Premium $16–20/mo) rather than inventing numbers, and against the actual compute-cost math worked out earlier (marginal cost per video is well under these prices regardless of model size, so cost isn't the constraint — these are value-anchored, not cost-plus). **Target market still explicitly undecided** (healthcare CE professionals vs. college students, or both) — these numbers are a deliberate middle ground meant to work reasonably for either until there's real signup data to tell which persona is actually showing up, not numbers optimized for one segment. Revisit once there's usage data, per the user's own framing of this decision.
 
 ### Decided: storage & retention (2026-08-12)
 
