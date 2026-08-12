@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Early build — stack scaffolded, schema migrated to a local dev DB, no processing pipeline yet.** Next.js/TypeScript app mirroring healthReference's and patientRecordSystem's stack (see "Decided: stack" below). Home dashboard and sessions list are wired to a real database. The actual video pipeline — transcode, scene detection, transcription — is **not implemented**, only its data model. See "Deliberately not built yet" under "Data model" below before assuming anything works end to end.
+**Early build.** Next.js/TypeScript app mirroring healthReference's and patientRecordSystem's stack (see "Decided: stack" below). Public marketing/pricing page, working email+password auth (signup/login/logout, session-gated app routes), and a dashboard/sessions list wired to a real database all exist and are verified working. ffmpeg-based transcode and scene detection are tested, working functions in `worker/`. What's still missing: whisper.cpp transcription, an actual upload endpoint, and the job-handler logic tying the pipeline together — see "Deliberately not built yet" under "Data model" below before assuming anything end-to-end works.
 
 ## Project
 
@@ -42,9 +42,15 @@ A **paid service** — per-video or subscription (not decided which, or both). T
 
 **Local Whisper only — no cloud transcription API**, regardless of any provider's stated training/retention policy. Users' video content should never leave the machine it's processed on. Leaning **whisper.cpp** (C++ port, no Python dependency, Metal-accelerated on Apple Silicon) invoked as a local binary the same way ffmpeg will be — fits the existing "shell out to a local tool" shape rather than introducing Python or a persistent model-serving process. Model size (tiny/base/small/medium/large — speed vs. accuracy) not yet chosen. **Not implemented yet** — this is the decided direction, not working code.
 
-### Decided: auth mechanism (2026-08-12)
+### Decided: auth mechanism (2026-08-12) — built
 
-**Email + password**, not OAuth or magic-link — keeps credential storage in-house rather than round-tripping logins through a third-party identity provider, consistent with the local-processing-only stance above. `users` table exists (`email`, `password_hash`) but **login/signup pages, password hashing wiring, and session/cookie handling are not built yet**.
+**Email + password**, not OAuth or magic-link — keeps credential storage in-house rather than round-tripping logins through a third-party identity provider, consistent with the local-processing-only stance above.
+
+- `lib/auth.ts` — `hashPassword`/`verifyPassword` (`bcryptjs`, 12 rounds), `createSession`/`clearSession`/`getCurrentUserId` (a signed JWT via `jose`, HS256, in an httpOnly cookie — `SESSION_SECRET` in `.env.local`, generated locally, gitignored, **production needs its own**, not the same value). 30-day expiry. `getCurrentUserId()` returns `null` for a missing/expired/tampered cookie rather than throwing — callers treat "no session" and "bad session" identically.
+- `app/api/auth/{signup,login,logout}/route.ts` — signup validates email format + 8-char-minimum password, hashes, inserts, and relies on the `users.email` unique constraint (Postgres error `23505`) for the race-safe duplicate check rather than a pre-check `SELECT` (which would have a TOCTOU gap). Login returns the same generic "Invalid email or password" whether the email doesn't exist or the password is wrong — deliberate, avoids user-enumeration.
+- **No `middleware.ts`** — auth gating happens in `app/(app)/layout.tsx` (a server component that calls `getCurrentUserId()` and `redirect("/login")` if absent), not Next.js middleware. Keeps the "no middleware" pattern consistent with healthReference/patientRecordSystem rather than introducing a new architectural layer.
+- Verified end-to-end with a real browser (Playwright, scratch script, not committed): signup → dashboard, logout → redirected to `/login` on next visit to a protected route, duplicate-email signup shows the 409 error, wrong password shows the generic 401, correct login succeeds, and visiting `/login`/`/signup` while already authenticated redirects to `/dashboard` instead of showing the form again.
+- **Not built**: password reset/forgot-password, email verification, rate limiting on login attempts. `sessions.user_id` still isn't populated by anything (no upload flow exists to create a session row yet), and `app/(app)/sessions/page.tsx` still queries all sessions unfiltered rather than scoping to the logged-in user — the auth *mechanism* works, but nothing downstream uses `getCurrentUserId()` yet outside the layout gate itself.
 
 ### Decided: pipeline orchestration (2026-08-12)
 
@@ -72,17 +78,26 @@ Local Postgres (Homebrew, same server already running for healthReference/patien
 `lib/migrate.ts` covers only two tables, deliberately thin given "Decided: storage & retention" above — there's no media to reference, so there's nothing resembling the earlier `screenshots`/`transcript_segments` tables (removed, not just unused):
 
 - `users` — `email` (unique), `password_hash`, `created_at`. For the future email+password auth — see "Decided: auth mechanism".
-- `sessions` — a usage **log**, not a record of output: `user_id` (FK → `users`, `NOT NULL`), `original_filename`, `status` (`processing` / `complete` / `failed`), `error_message`, timestamps. No `video_key`/`image_key`/anything pointing at stored content, because nothing is stored. Currently unfiltered by user on `app/sessions/page.tsx` since there's no login session to filter by yet.
+- `sessions` — a usage **log**, not a record of output: `user_id` (FK → `users`, `NOT NULL`), `original_filename`, `status` (`processing` / `complete` / `failed`), `error_message`, timestamps. No `video_key`/`image_key`/anything pointing at stored content, because nothing is stored. Currently unfiltered by user on `app/(app)/sessions/page.tsx` — auth exists now (see below) but nothing queries by `user_id` yet, since no upload flow exists to create session rows in the first place.
 
 **Deliberately not built yet — don't assume these exist or guess at their shape:**
 
 - **The processing pipeline itself.** `worker/` exists and can receive/complete a job, and both `transcodeToMp4()` and `extractSceneFrames()` (ffmpeg) are tested, working functions — see "Decided: pipeline orchestration" for both. But the job handler is still a stub that doesn't call either: no whisper.cpp integration, no ephemeral-temp-dir-then-zip-then-handback logic tying it all together. Nothing in the web app creates real jobs yet either — no upload endpoint calls `boss.send()`, so there's no real input file to point either function at.
-- **Auth implementation** — mechanism is decided (email+password) but no signup/login pages, no password hashing wired up, no session/cookie handling. `sessions.user_id` can't actually be populated by anything yet.
-- **Billing/payment integration** — business model is "paid" but Stripe (or any provider), pricing, and the plan/credit shape are all undecided. Don't invent a `plans` or `credits` table.
+- **Billing/payment integration** — business model is "paid" but Stripe (or any provider), pricing, and the plan/credit shape are all undecided. Don't invent a `plans` or `credits` table. The pricing section on the hero page (`app/(marketing)/page.tsx`) uses placeholder `$X`/`$Y` values, explicitly labeled as such — not real prices, don't treat them as decided numbers to build against.
+
+### Routing structure (2026-08-12)
+
+Two route groups, each with its own layout — introduced alongside auth since logged-out (marketing) and logged-in (app) pages need different chrome:
+
+- **`app/(marketing)/`** — public, no `Sidebar`. `page.tsx` is the hero/pricing landing page at `/`, plus `login/` and `signup/`. Its layout (`app/(marketing)/layout.tsx`) shows a simple header — "Log in"/"Get Started" links if logged out, a "Dashboard" link if logged in (reads `getCurrentUserId()`, doesn't redirect, just changes what's shown).
+- **`app/(app)/`** — `dashboard/` (the tile dashboard, moved here from the old `app/page.tsx`), `sessions/`, `upload/`. Its layout (`app/(app)/layout.tsx`) renders `Sidebar` and redirects to `/login` if there's no session — this is the auth gate, see "Decided: auth mechanism".
+- Route groups don't affect the URL — `/dashboard`, `/sessions`, `/upload` are still those exact paths, just nested under `(app)/` in the filesystem for layout purposes.
+- Root `app/layout.tsx` is now minimal — just `<html>`/`<body>`/font, no `Sidebar`, since that's specific to `(app)/layout.tsx` now.
+- `components/Sidebar.tsx`'s "Home" nav link and brand link now point to `/dashboard` (not `/`, which is the public marketing page now) and it gained a "Log out" button (POSTs to `/api/auth/logout`, then `router.push("/")`).
 
 ### UI/architecture match, not a data dependency
 
-Visually and structurally mirrors healthReference and patientRecordSystem — same Porcelain/Graphite/Alabaster Grey theme (`app/globals.css`), Geist font, sidebar nav (`components/Sidebar.tsx`), and dashboard "widget" tile pattern (`components/NewSessionWidget.tsx`, `components/SessionsWidget.tsx`). Unlike patientRecordSystem, **ScreenScribe has no data dependency on either sibling app** — this is purely a stack/UI convention match, not integration. `docs/tech-stack/` here documents ScreenScribe's own (still mostly unbuilt) architecture, not a copy of theirs.
+Visually and structurally mirrors healthReference and patientRecordSystem — same Porcelain/Graphite/Alabaster Grey theme (`app/globals.css`), Geist font, sidebar nav (`components/Sidebar.tsx`), and dashboard "widget" tile pattern (`components/NewSessionWidget.tsx`, `components/SessionsWidget.tsx`). The marketing hero page reuses the same palette rather than introducing new colors, styled with card/tile patterns consistent with the rest of the app (see "Routing structure" above). Unlike patientRecordSystem, **ScreenScribe has no data dependency on either sibling app** — this is purely a stack/UI convention match, not integration. `docs/tech-stack/` here documents ScreenScribe's own (still mostly unbuilt) architecture, not a copy of theirs.
 
 ## Commands
 

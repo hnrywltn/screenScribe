@@ -5,7 +5,7 @@ import NewSessionWidget from "@/components/NewSessionWidget";
 import SessionsWidget from "@/components/SessionsWidget";
 import TutorialButton from "@/components/TutorialButton";
 
-export default async function Home() {
+export default async function DashboardPage() {
   const { rows } = await pool.query(`SELECT count(*)::int AS count FROM sessions`);
   const sessionCount = rows[0].count;
 

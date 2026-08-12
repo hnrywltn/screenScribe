@@ -3,9 +3,15 @@
 ## Framework
 
 - **Next.js 16** (App Router), TypeScript, React 19
-- `app/` — pages (`app/page.tsx`, `app/sessions/`, `app/upload/`) and API route handlers (`app/api/`, none exist yet)
-- `lib/` — shared server code (`db.ts`, `migrate.ts`)
+- `app/` — two route groups (see "Routing" below) plus `app/api/auth/` route handlers
+- `lib/` — shared server code (`db.ts`, `migrate.ts`, `auth.ts`)
 - `components/` — UI components
+
+## Routing: `(marketing)` vs. `(app)` route groups
+
+- **`app/(marketing)/`** — public, no `Sidebar`: hero/pricing page at `/`, `login/`, `signup/`. Layout shows "Log in"/"Get Started" or a "Dashboard" link depending on session state (read-only check, no redirect).
+- **`app/(app)/`** — `dashboard/`, `sessions/`, `upload/`. Layout renders `Sidebar` and is the auth gate: redirects to `/login` if `getCurrentUserId()` returns `null`. Route groups don't affect URLs — `/dashboard` is still `/dashboard`.
+- Root `app/layout.tsx` is minimal (`<html>`/`<body>`/font only) — `Sidebar` lives in `(app)/layout.tsx`, not the root, since marketing pages don't have it.
 
 ## Worker package (`worker/`)
 
@@ -17,11 +23,11 @@ A **separate npm package**, not part of the Next.js app — own `package.json`, 
 
 ## Middleware
 
-**None.** No `middleware.ts` — no request interception, no auth gate.
+**None.** No `middleware.ts` — auth gating is done in `app/(app)/layout.tsx` (a server component, `redirect()` if unauthenticated) rather than middleware, keeping this consistent with healthReference/patientRecordSystem instead of introducing a new architectural layer for it.
 
-## Auth
+## Auth — built
 
-**Mechanism decided (email + password), not implemented.** `users` table exists; no signup/login pages, no password hashing wired up, no session/cookie handling yet. See `CLAUDE.md` → "Decided: auth mechanism".
+Email + password. `lib/auth.ts`: `bcryptjs` for hashing (12 rounds), `jose` for a signed HS256 JWT in an httpOnly cookie (`SESSION_SECRET` in `.env.local`, 30-day expiry). `app/api/auth/{signup,login,logout}/route.ts` handle the three actions; `LoginForm`/`SignupForm` client components post to them. Verified end-to-end with a real browser session (signup → dashboard → logout → gated again, duplicate-email and wrong-password error paths, already-authenticated redirect away from `/login`/`/signup`). See `CLAUDE.md` → "Decided: auth mechanism" for what's still missing (password reset, email verification, rate limiting — none built).
 
 ## The processing pipeline — mostly not implemented
 
@@ -44,7 +50,7 @@ This is the core of what ScreenScribe is supposed to do. Two pieces work, the re
 
 ## Guided tour ("Tutorial" button)
 
-Tooltip/coachmark-style tour via `driver.js`, triggered from the button on the home page (`components/TutorialButton.tsx`). Steps target elements by `data-tour` attribute, resolved through a small helper that picks whichever matching element is actually visible (`offsetParent !== null`) — needed because the mobile top bar and desktop sidebar both render nav links with the same attributes, only one of which is on screen at a time. Popover styling is reskinned in `globals.css` (`.driver-popover*` rules) to match the app palette instead of driver.js's default theme.
+Tooltip/coachmark-style tour via `driver.js`, triggered from the button on `app/(app)/dashboard/page.tsx` (`components/TutorialButton.tsx`). Steps target elements by `data-tour` attribute, resolved through a small helper that picks whichever matching element is actually visible (`offsetParent !== null`) — needed because the mobile top bar and desktop sidebar both render nav links with the same attributes, only one of which is on screen at a time. Popover styling is reskinned in `globals.css` (`.driver-popover*` rules) to match the app palette instead of driver.js's default theme.
 
 ## Data model shape
 

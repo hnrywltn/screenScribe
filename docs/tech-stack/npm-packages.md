@@ -11,8 +11,10 @@ As of the versions pinned in `package.json`. Run `npm ls <pkg>` or check `packag
 | `pg` | ^8.20.0 | Raw Postgres driver — no ORM. See [`database.md`](./database.md) |
 | `lucide-react` | ^1.8.0 | Icon set used throughout the UI |
 | `driver.js` | ^1.8.0 | Powers the "Tutorial" button's guided tour (tooltip/coachmark style) on the home page — see `components/TutorialButton.tsx`. Loaded via dynamic `import()` inside the click handler so it isn't in the initial page bundle; its CSS is statically imported and reskinned in `app/globals.css` to match the app palette instead of the library's default blue/white theme. |
+| `bcryptjs` | ^3.0.3 | Password hashing for email+password auth (12 rounds) — see `lib/auth.ts` and `CLAUDE.md` → "Decided: auth mechanism" |
+| `jose` | ^6.2.8 | Signs/verifies the session JWT stored in an httpOnly cookie — `lib/auth.ts` |
 
-Not yet added, needed once the pipeline is built: a way to shell out to ffmpeg and to a local `whisper.cpp` binary, a zip library for bundling the download, and (separately, for auth) `bcryptjs`/similar for password hashing and `jose`/similar for session tokens. **No object-storage SDK needed** — unlike healthReference/patientRecordSystem there's no persistent file storage to talk to (see `architecture.md` → "Storage: ephemeral only, by design").
+Not yet added, needed once the pipeline is built: a way to shell out to a local `whisper.cpp` binary (ffmpeg itself is already wired up, see `architecture.md`), a zip library for bundling the download. **No object-storage SDK needed** — unlike healthReference/patientRecordSystem there's no persistent file storage to talk to (see `architecture.md` → "Storage: ephemeral only, by design").
 
 ## Worker package (`worker/`)
 
@@ -40,7 +42,7 @@ Dev: `typescript` ^7.0.2, `tsx` ^4.23.12 (runs `index.ts` directly, no build ste
 | `eslint` + `eslint-config-next` | ^9 / 16.2.4 | Linting (`npm run lint`) |
 | `tsx` | ^4.21.0 | Runs `lib/migrate.ts` directly |
 | `dotenv` | ^17.4.2 | Loads `.env.local` into `lib/migrate.ts` (Next.js loads env vars automatically for the app itself; this standalone script needs it manually) |
-| `@types/*` | — | Type definitions for `node`, `react`, `react-dom`, `pg` |
+| `@types/*` | — | Type definitions for `node`, `react`, `react-dom`, `pg`, `bcryptjs` |
 
 ## Python packages
 

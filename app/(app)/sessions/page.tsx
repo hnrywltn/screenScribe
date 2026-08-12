@@ -3,8 +3,8 @@ export const dynamic = "force-dynamic";
 import pool from "@/lib/db";
 
 export default async function SessionsPage() {
-  // Not yet scoped to the logged-in user — no auth session to filter by.
-  // Lists every session in the DB until login exists.
+  // Not yet scoped to the logged-in user — sessions.user_id exists but
+  // nothing filters by it here yet. Lists every session in the DB.
   const { rows: sessions } = await pool.query(
     `SELECT id, original_filename, status, created_at FROM sessions ORDER BY created_at DESC`
   );
