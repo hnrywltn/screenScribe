@@ -60,6 +60,15 @@ async function migrate() {
       ALTER TABLE sessions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ
     `);
 
+    // Email verification (2026-08-14) — soft/non-blocking: signup still
+    // logs the user in immediately, this just tracks whether they've
+    // confirmed the address, for a reminder banner. NULL = unverified.
+    // No separate token table — verification tokens are short-lived JWTs
+    // (lib/auth.ts), not stored server-side at all.
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ
+    `);
+
     await client.query("COMMIT");
     console.log("Migration complete.");
   } catch (err) {

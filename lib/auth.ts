@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 
 const SESSION_COOKIE = "screenscribe_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
+const VERIFICATION_MAX_AGE = "24h";
 
 function secretKey() {
   const secret = process.env.SESSION_SECRET;
@@ -22,7 +23,12 @@ export function verifyPassword(password: string, hash: string): Promise<boolean>
 // Only callable from a Route Handler or Server Function — Next.js
 // disallows setting cookies during Server Component rendering.
 export async function createSession(userId: string): Promise<void> {
-  const token = await new SignJWT({ userId })
+  // `purpose` is checked on the way back out (getCurrentUserId) so a
+  // verification-link token (below) can never be replayed as a login
+  // session, or vice versa — both are signed with the same secret,
+  // purpose-scoping is the only thing keeping them from being
+  // interchangeable.
+  const token = await new SignJWT({ userId, purpose: "session" })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${SESSION_MAX_AGE_SECONDS}s`)
@@ -54,6 +60,28 @@ export async function getCurrentUserId(): Promise<string | null> {
 
   try {
     const { payload } = await jwtVerify(token, secretKey());
+    if (payload.purpose !== "session") return null;
+    return typeof payload.userId === "string" ? payload.userId : null;
+  } catch {
+    return null;
+  }
+}
+
+// Verification tokens are short-lived JWTs, not stored server-side —
+// there's nothing to look up, the signature + purpose + expiry check
+// alone is the proof of email ownership.
+export async function createVerificationToken(userId: string): Promise<string> {
+  return new SignJWT({ userId, purpose: "email-verification" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(VERIFICATION_MAX_AGE)
+    .sign(secretKey());
+}
+
+export async function verifyVerificationToken(token: string): Promise<string | null> {
+  try {
+    const { payload } = await jwtVerify(token, secretKey());
+    if (payload.purpose !== "email-verification") return null;
     return typeof payload.userId === "string" ? payload.userId : null;
   } catch {
     return null;

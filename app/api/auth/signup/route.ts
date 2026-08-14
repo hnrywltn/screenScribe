@@ -2,7 +2,8 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
-import { hashPassword, createSession } from "@/lib/auth";
+import { hashPassword, createSession, createVerificationToken } from "@/lib/auth";
+import { sendVerificationEmail } from "@/lib/email";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -26,6 +27,18 @@ export async function POST(request: Request) {
       [email, passwordHash]
     );
     await createSession(rows[0].id);
+
+    // Soft verification — signup still succeeds and logs the user in
+    // even if this fails. A missing/failed verification email just means
+    // the banner (components/VerifyEmailBanner.tsx) sticks around and
+    // they can request a resend.
+    try {
+      const token = await createVerificationToken(rows[0].id);
+      await sendVerificationEmail(email, token);
+    } catch (err) {
+      console.error("failed to send verification email:", err);
+    }
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     // Postgres unique_violation on users.email — race-safe, this is the

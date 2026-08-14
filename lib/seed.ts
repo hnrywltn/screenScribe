@@ -17,10 +17,12 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 async function seed() {
   const passwordHash = await bcrypt.hash(DEV_PASSWORD, 12);
 
+  // Pre-verified — dev@screenscribe.test is a non-routable .test address
+  // that could never actually receive/click a real verification email.
   await pool.query(
-    `INSERT INTO users (email, password_hash)
-     VALUES ($1, $2)
-     ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash`,
+    `INSERT INTO users (email, password_hash, email_verified_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, email_verified_at = NOW()`,
     [DEV_EMAIL, passwordHash]
   );
 

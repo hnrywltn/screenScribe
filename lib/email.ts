@@ -1,0 +1,42 @@
+// Deliberate duplicate of worker/lib/email.ts's pattern, not a shared
+// import — separate npm packages, and these send different things (this
+// one's account emails, the worker's is processing-complete). Same
+// approach: raw fetch to Resend's REST API, no SDK.
+const RESEND_API_URL = "https://api.resend.com/emails";
+// Resend's shared test sender — works without a verified custom domain,
+// but only delivers to the Resend account's own verified address. Swap
+// for a real "from" once a domain is verified with Resend.
+const FROM_ADDRESS = "ScreenScribe <onboarding@resend.dev>";
+
+export async function sendVerificationEmail(to: string, token: string): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const verifyUrl = `${appUrl}/api/auth/verify?token=${encodeURIComponent(token)}`;
+
+  if (!apiKey) {
+    console.log(`[email] RESEND_API_KEY not set — would have emailed ${to} a verification link: ${verifyUrl}`);
+    return;
+  }
+
+  const res = await fetch(RESEND_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: FROM_ADDRESS,
+      to,
+      subject: "Verify your ScreenScribe email",
+      html:
+        `<p>Confirm your email so you don't miss download-ready notifications.</p>` +
+        `<p><a href="${verifyUrl}">Verify your email</a> — this link expires in 24 hours.</p>`,
+    }),
+  });
+
+  if (!res.ok) {
+    // Don't throw — a failed verification email shouldn't fail signup
+    // itself. Log loudly so it's visible; the user can request a resend.
+    console.error(`[email] Resend API error (${res.status}):`, await res.text());
+  }
+}
