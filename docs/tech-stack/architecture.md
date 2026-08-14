@@ -42,7 +42,7 @@ Email + password. `lib/auth.ts`: `bcryptjs` for hashing (12 rounds), `jose` for 
 
 ## Notifications
 
-Email (Resend, via raw `fetch` to their REST API — `worker/lib/email.ts`, no SDK) + in-app polling (`components/AutoRefresh.tsx`, `router.refresh()` every 5s on `/sessions`, not a websocket/SSE). **No real `RESEND_API_KEY` configured** — logs instead of sending until one exists. See `CLAUDE.md` → "Decided: notifications & download window".
+Email (Resend, via raw `fetch` to their REST API — `worker/lib/email.ts`, no SDK) + in-app polling (`components/AutoRefresh.tsx`, `router.refresh()` every 5s on `/sessions`, not a websocket/SSE). **`RESEND_API_KEY` is configured and verified working** (2026-08-14) — but no custom domain is verified with Resend, so delivery is currently limited to the Resend account owner's own email, not arbitrary signup users. See `CLAUDE.md` → "Decided: notifications & download window".
 
 ## Storage: bounded, not persistent
 
