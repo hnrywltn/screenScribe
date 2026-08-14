@@ -1,19 +1,35 @@
 export const dynamic = "force-dynamic";
 
+import { redirect } from "next/navigation";
 import pool from "@/lib/db";
+import { getCurrentUserId } from "@/lib/auth";
+import AutoRefresh from "@/components/AutoRefresh";
+
+const STATUS_LABEL: Record<string, string> = {
+  queued: "Queued",
+  processing: "Processing…",
+  complete: "Ready to download",
+  downloaded: "Downloaded",
+  expired: "Expired",
+  failed: "Failed",
+};
 
 export default async function SessionsPage() {
-  // Not yet scoped to the logged-in user — sessions.user_id exists but
-  // nothing filters by it here yet. Lists every session in the DB.
+  const userId = await getCurrentUserId();
+  if (!userId) redirect("/login"); // (app)/layout.tsx already gates this — defensive
+
   const { rows: sessions } = await pool.query(
-    `SELECT id, original_filename, status, created_at FROM sessions ORDER BY created_at DESC`
+    `SELECT id, original_filename, status, created_at FROM sessions WHERE user_id = $1 ORDER BY created_at DESC`,
+    [userId]
   );
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-10">
+      <AutoRefresh />
       <h1 className="text-2xl font-semibold text-[var(--color-text)]">Sessions</h1>
       <p className="text-sm text-[var(--color-muted)] mt-1">
-        A history of what you&apos;ve processed. Downloads are one-time — nothing is stored after the zip is generated.
+        Your upload queue. Downloads stay available for 1 hour after processing finishes, then they&apos;re gone for
+        good.
       </p>
 
       {sessions.length === 0 ? (
@@ -29,7 +45,19 @@ export default async function SessionsPage() {
                 <p className="font-medium text-[var(--color-text)] truncate">{s.original_filename}</p>
                 <p className="text-xs text-[var(--color-muted)]">{new Date(s.created_at).toLocaleString()}</p>
               </div>
-              <span className="text-xs uppercase tracking-wide text-[var(--color-muted)] shrink-0">{s.status}</span>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-xs uppercase tracking-wide text-[var(--color-muted)]">
+                  {STATUS_LABEL[s.status] ?? s.status}
+                </span>
+                {s.status === "complete" && (
+                  <a
+                    href={`/api/sessions/${s.id}/download`}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-sidebar)] text-white hover:bg-[var(--color-sidebar-hover)] transition-colors"
+                  >
+                    Download
+                  </a>
+                )}
+              </div>
             </div>
           ))}
         </div>

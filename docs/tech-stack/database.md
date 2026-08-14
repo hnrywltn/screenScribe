@@ -8,14 +8,15 @@
 
 ## Tables
 
-Just two — deliberately thin. See `CLAUDE.md` → "Decided: storage & retention": nothing about a processed video persists, so there's no media table to design.
+Just two — deliberately thin. See `CLAUDE.md` → "Decided: storage & retention": nothing about a processed video persists *durably*, so there's no media table to design.
 
-- `users` — `id` (UUID PK), `email` (unique), `password_hash`, `created_at`. Written to by `app/api/auth/signup/route.ts`, read by `app/api/auth/login/route.ts` — email+password auth is built, see `CLAUDE.md` → "Decided: auth mechanism".
-- `sessions` — a **usage log**, not a record of output: `id` (UUID PK), `user_id` (FK → `users`, `ON DELETE CASCADE`, `NOT NULL`), `original_filename`, `status` (`processing` / `complete` / `failed`), `error_message`, `created_at`/`updated_at`. Indexed on `user_id`. No `video_key`/`image_key`/anything pointing at stored content.
+- `users` — `id` (UUID PK), `email` (unique), `password_hash`, `created_at`. Written to by `app/api/auth/signup/route.ts`, read by `app/api/auth/login/route.ts` and by the worker (to find the address for the "ready" email) — email+password auth is built, see `CLAUDE.md` → "Decided: auth mechanism".
+- `sessions` — a real lifecycle, not just a log: `id` (UUID PK), `user_id` (FK → `users`, `ON DELETE CASCADE`, `NOT NULL`), `original_filename`, `status` (`queued` / `processing` / `complete` / `downloaded` / `expired` / `failed`, default `'queued'`), `error_message`, `expires_at` (nullable, set to `NOW() + INTERVAL '1 hour'` when a job completes), `created_at`/`updated_at`. Indexed on `user_id`. Still no `video_key`/`image_key` — the actual file lives transiently on disk (`SHARED_TEMP_DIR`, see `architecture.md`), never referenced by a DB column, so there's no persistent pointer to clean up or worry about leaking.
 
 ## Notable patterns
 
 - `users.email` has a `UNIQUE` constraint that's actually relied on — the signup route inserts directly and catches Postgres error `23505` (unique_violation) rather than doing a pre-check `SELECT` first, which would leave a race window between the check and the insert.
-- No row-level auth/permissions enforced yet on `sessions` — `user_id` is `NOT NULL` and auth now exists to populate it, but nothing does: no upload flow creates session rows yet, so the column is correct but unused. `app/(app)/sessions/page.tsx` queries all sessions unfiltered.
-- **Previously had `screenshots` and `transcript_segments` tables** (one row per detected slide, one per transcript segment) — removed 2026-08-12 when the storage model changed from "keep the output, let users re-download" to "one-time download, nothing kept." Pre-launch with no real data in either table, so `lib/migrate.ts` was rewritten directly rather than layering `DROP TABLE` statements on top of the old shape — see `docs/changelogs/2026-08-12.md`.
-- Nothing currently writes to either table outside `lib/migrate.ts` — no signup or upload code exists yet, so in a fresh checkout both tables are empty.
+- **`sessions.status` transitions are enforced by `UPDATE ... WHERE status = 'x'` clauses, not application-level locking.** Two places rely on this: the worker's job handler only ever moves a session forward (`queued`→`processing`→`complete`), and the download route's claim step (`UPDATE sessions SET status = 'downloaded' ... WHERE status = 'complete' RETURNING id`) is what makes concurrent double-download attempts safe — if two requests race, only one `UPDATE` actually matches a row.
+- `sessions.user_id` is now genuinely used everywhere: the upload route sets it, the dashboard/sessions pages filter by it (`getCurrentUserId()`), the download route checks it before serving anything.
+- **Previously had `screenshots` and `transcript_segments` tables** (one row per detected slide, one per transcript segment) — removed 2026-08-12 when the storage model changed from "keep the output, let users re-download" to "one-time download, nothing kept." See `docs/changelogs/2026-08-12.md`.
+- `expires_at` and the expanded `status` vocabulary were added via a real `ALTER TABLE` (2026-08-14) rather than a from-scratch rewrite — real user accounts existed in the table by then, unlike earlier schema changes.

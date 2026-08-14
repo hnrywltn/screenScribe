@@ -1,12 +1,17 @@
 export const dynamic = "force-dynamic";
 
 import pool from "@/lib/db";
+import { getCurrentUserId } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import NewSessionWidget from "@/components/NewSessionWidget";
 import SessionsWidget from "@/components/SessionsWidget";
 import TutorialButton from "@/components/TutorialButton";
 
 export default async function DashboardPage() {
-  const { rows } = await pool.query(`SELECT count(*)::int AS count FROM sessions`);
+  const userId = await getCurrentUserId();
+  if (!userId) redirect("/login"); // (app)/layout.tsx already gates this — defensive
+
+  const { rows } = await pool.query(`SELECT count(*)::int AS count FROM sessions WHERE user_id = $1`, [userId]);
   const sessionCount = rows[0].count;
 
   return (
