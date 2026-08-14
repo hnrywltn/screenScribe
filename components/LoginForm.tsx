@@ -18,15 +18,24 @@ const DEV_PASSWORD = isDev ? "devpassword123" : "";
 
 export default function LoginForm() {
   const router = useRouter();
-  const [email, setEmail] = useState(DEV_EMAIL);
-  const [password, setPassword] = useState(DEV_PASSWORD);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
+
+    // Read straight from the form via FormData, not React state. These
+    // fields are uncontrolled (defaultValue, no onChange) on purpose —
+    // browser autofill fills the DOM value without reliably firing the
+    // input event a controlled component needs to stay in sync, so a
+    // controlled `email`/`password` state can silently go stale even
+    // though the field visibly shows the right value. FormData always
+    // reflects exactly what's currently in the form.
+    const formData = new FormData(e.currentTarget);
+    const email = String(formData.get("email") ?? "");
+    const password = String(formData.get("password") ?? "");
 
     const res = await fetch("/api/auth/login", {
       method: "POST",
@@ -58,11 +67,11 @@ export default function LoginForm() {
         </label>
         <input
           id="email"
+          name="email"
           type="email"
           required
           autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          defaultValue={DEV_EMAIL}
           className={inputClass}
         />
       </div>
@@ -72,11 +81,11 @@ export default function LoginForm() {
         </label>
         <input
           id="password"
+          name="password"
           type="password"
           required
           autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          defaultValue={DEV_PASSWORD}
           className={inputClass}
         />
       </div>

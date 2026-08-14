@@ -9,15 +9,20 @@ const inputClass =
 
 export default function SignupForm() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
+
+    // Read from FormData, not React state — see LoginForm.tsx for why
+    // (browser autofill / password managers can fill these fields
+    // without reliably firing the events a controlled input relies on).
+    const formData = new FormData(e.currentTarget);
+    const email = String(formData.get("email") ?? "");
+    const password = String(formData.get("password") ?? "");
 
     const res = await fetch("/api/auth/signup", {
       method: "POST",
@@ -42,15 +47,7 @@ export default function SignupForm() {
         <label htmlFor="email" className="block text-sm text-[var(--color-text)] mb-1">
           Email
         </label>
-        <input
-          id="email"
-          type="email"
-          required
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className={inputClass}
-        />
+        <input id="email" name="email" type="email" required autoComplete="email" className={inputClass} />
       </div>
       <div>
         <label htmlFor="password" className="block text-sm text-[var(--color-text)] mb-1">
@@ -58,12 +55,11 @@ export default function SignupForm() {
         </label>
         <input
           id="password"
+          name="password"
           type="password"
           required
           minLength={8}
           autoComplete="new-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
           className={inputClass}
         />
         <p className="mt-1 text-xs text-[var(--color-muted)]">At least 8 characters.</p>
