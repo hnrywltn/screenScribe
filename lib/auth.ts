@@ -6,6 +6,12 @@ import pool from "./db";
 const SESSION_COOKIE = "screenscribe_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const VERIFICATION_MAX_AGE = "24h";
+// Shorter than verification's 24h — a reset link is realistically
+// clicked within minutes if legitimate, and unlike replaying a
+// verification link (harmless/idempotent), replaying a password-reset
+// link isn't. A short window shrinks that exposure at zero added
+// complexity.
+const PASSWORD_RESET_MAX_AGE = "30m";
 
 function secretKey() {
   const secret = process.env.SESSION_SECRET;
@@ -104,6 +110,30 @@ export async function verifyVerificationToken(token: string): Promise<string | n
   try {
     const { payload } = await jwtVerify(token, secretKey());
     if (payload.purpose !== "email-verification") return null;
+    return typeof payload.userId === "string" ? payload.userId : null;
+  } catch {
+    return null;
+  }
+}
+
+// Same shape as the verification token above — no DB token table, the
+// signature + purpose + expiry alone is the proof. Known, accepted
+// trade-off: there's no server-side single-use tracking, so a token
+// remains valid (replayable) for its full window even after being used
+// once — same trade-off already accepted for email verification, kept
+// consistent rather than introducing a used-tokens table here alone.
+export async function createPasswordResetToken(userId: string): Promise<string> {
+  return new SignJWT({ userId, purpose: "password-reset" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(PASSWORD_RESET_MAX_AGE)
+    .sign(secretKey());
+}
+
+export async function verifyPasswordResetToken(token: string): Promise<string | null> {
+  try {
+    const { payload } = await jwtVerify(token, secretKey());
+    if (payload.purpose !== "password-reset") return null;
     return typeof payload.userId === "string" ? payload.userId : null;
   } catch {
     return null;

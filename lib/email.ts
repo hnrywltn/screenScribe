@@ -40,3 +40,34 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
     console.error(`[email] Resend API error (${res.status}):`, await res.text());
   }
 }
+
+export async function sendPasswordResetEmail(to: string, token: string): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const resetUrl = `${appUrl}/reset-password?token=${encodeURIComponent(token)}`;
+
+  if (!apiKey) {
+    console.log(`[email] RESEND_API_KEY not set — would have emailed ${to} a password reset link: ${resetUrl}`);
+    return;
+  }
+
+  const res = await fetch(RESEND_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: FROM_ADDRESS,
+      to,
+      subject: "Reset your ScreenScribe password",
+      html:
+        `<p>Someone requested a password reset for this account. If that wasn't you, ignore this email.</p>` +
+        `<p><a href="${resetUrl}">Reset your password</a> — this link expires in 30 minutes.</p>`,
+    }),
+  });
+
+  if (!res.ok) {
+    console.error(`[email] Resend API error (${res.status}):`, await res.text());
+  }
+}

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import pool from "@/lib/db";
 import { getCurrentUserId } from "@/lib/auth";
 import AutoRefresh from "@/components/AutoRefresh";
+import ExtendSessionButton from "@/components/ExtendSessionButton";
 
 const STATUS_LABEL: Record<string, string> = {
   queued: "Queued",
@@ -19,7 +20,7 @@ export default async function SessionsPage() {
   if (!userId) redirect("/login"); // (app)/layout.tsx already gates this — defensive
 
   const { rows: sessions } = await pool.query(
-    `SELECT id, original_filename, status, created_at FROM sessions WHERE user_id = $1 ORDER BY created_at DESC`,
+    `SELECT id, original_filename, status, created_at, expires_at, extended FROM sessions WHERE user_id = $1 ORDER BY created_at DESC`,
     [userId]
   );
 
@@ -43,12 +44,18 @@ export default async function SessionsPage() {
             >
               <div className="min-w-0">
                 <p className="font-medium text-[var(--color-text)] truncate">{s.original_filename}</p>
-                <p className="text-xs text-[var(--color-muted)]">{new Date(s.created_at).toLocaleString()}</p>
+                <p className="text-xs text-[var(--color-muted)]">
+                  {new Date(s.created_at).toLocaleString()}
+                  {s.status === "complete" && s.expires_at && (
+                    <> · Ready — download by {new Date(s.expires_at).toLocaleTimeString()}</>
+                  )}
+                </p>
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 <span className="text-xs uppercase tracking-wide text-[var(--color-muted)]">
                   {STATUS_LABEL[s.status] ?? s.status}
                 </span>
+                {s.status === "complete" && !s.extended && <ExtendSessionButton sessionId={s.id} />}
                 {s.status === "complete" && (
                   <a
                     href={`/api/sessions/${s.id}/download`}

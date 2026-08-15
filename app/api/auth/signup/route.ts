@@ -4,10 +4,20 @@ import { NextResponse } from "next/server";
 import pool from "@/lib/db";
 import { hashPassword, createSession, createVerificationToken } from "@/lib/auth";
 import { sendVerificationEmail } from "@/lib/email";
+import { isRateLimited, recordAttempt } from "@/lib/rateLimit";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: Request) {
+  // Best-effort — Railway sets x-forwarded-for reliably, but this isn't
+  // spoof-proof. Keyed by IP rather than email, since (unlike login) the
+  // thing being rate-limited is account-creation velocity from one
+  // source, not repeated attempts against one target.
+  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  if (await isRateLimited(clientIp, "signup", 10, 60)) {
+    return NextResponse.json({ error: "Too many attempts. Try again later." }, { status: 429 });
+  }
+
   const body = await request.json();
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
@@ -40,6 +50,10 @@ export async function POST(request: Request) {
   }
 
   const passwordHash = await hashPassword(password);
+
+  // Recorded once validation has passed, right before the real
+  // account-creation attempt — not on every malformed request.
+  await recordAttempt(clientIp, "signup");
 
   try {
     const { rows } = await pool.query<{ id: string }>(

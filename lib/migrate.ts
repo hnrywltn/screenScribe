@@ -184,6 +184,48 @@ async function migrate() {
       )
     `);
 
+    // Upload-time token enforcement (2026-08-14). Links a charge/refund
+    // in token_grants back to the session that caused it — lets the
+    // worker's refund-on-failure logic find "how much was this session
+    // charged" without a separate sessions.tokens_charged column, and
+    // keeps token_grants as the single source of truth for every
+    // balance change (see CLAUDE.md -> "Decided: upload token
+    // enforcement"). Nullable — most existing grants (purchases, admin
+    // comps) have no session to point to.
+    await client.query(`
+      ALTER TABLE token_grants ADD COLUMN IF NOT EXISTS session_id UUID REFERENCES sessions(id) ON DELETE SET NULL
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS token_grants_session_id_idx ON token_grants(session_id)
+    `);
+
+    // Paid expiry extension (2026-08-14) — capped at one use per
+    // session (max 2 hours total: 1 free + 1 paid), enforced at the app
+    // layer via an atomic UPDATE ... WHERE extended = FALSE, same "no
+    // CHECK constraint" convention as sessions.status/account_status.
+    await client.query(`
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS extended BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+
+    // Rate limiting (2026-08-14) — Postgres-backed, not Redis, same
+    // reasoning as choosing pg-boss over a new queue infra: reuse what's
+    // already in the stack. A plain attempt log; isRateLimited() does a
+    // windowed COUNT(*) against (key, action, created_at). Old rows are
+    // pruned by the scheduled cleanup job (worker/index.ts), not left
+    // to grow forever.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS rate_limit_attempts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        key TEXT NOT NULL,
+        action TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS rate_limit_attempts_key_action_created_idx
+        ON rate_limit_attempts(key, action, created_at)
+    `);
+
     await client.query("COMMIT");
     console.log("Migration complete.");
   } catch (err) {
