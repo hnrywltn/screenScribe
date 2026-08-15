@@ -69,6 +69,14 @@ async function migrate() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ
     `);
 
+    // Phone number (2026-08-14) — optional, not required. Collecting it
+    // as mandatory would sit oddly against the "extra private" pitch on
+    // the marketing page; nothing currently uses it (no SMS notifications
+    // built), it's just captured for future contact if given.
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT
+    `);
+
     await client.query("COMMIT");
     console.log("Migration complete.");
   } catch (err) {

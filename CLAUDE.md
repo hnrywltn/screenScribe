@@ -121,7 +121,7 @@ Local Postgres (Homebrew, same server already running for healthReference/patien
 
 `lib/migrate.ts` covers only two tables, deliberately thin given "Decided: storage & retention" above — there's no media to reference, so there's nothing resembling the earlier `screenshots`/`transcript_segments` tables (removed, not just unused):
 
-- `users` — `email` (unique), `password_hash`, `created_at`, `email_verified_at` (nullable, set on verification — see "Decided: email verification"). Real email+password auth — see "Decided: auth mechanism".
+- `users` — `email` (unique), `password_hash`, `created_at`, `email_verified_at` (nullable, set on verification — see "Decided: email verification"), `phone` (nullable, **optional** — collected at signup but not validated to a specific country format, nothing uses it yet, no SMS notifications built). Real email+password auth — see "Decided: auth mechanism".
 - `sessions` — a real lifecycle now, not just a log: `user_id` (FK → `users`, `NOT NULL`), `original_filename`, `status` (`queued` / `processing` / `complete` / `downloaded` / `expired` / `failed`), `error_message`, `expires_at`, timestamps. Still no `video_key`/`image_key`/anything pointing at *durable* stored content — the file only exists transiently in `SHARED_TEMP_DIR` between `complete` and `downloaded`/`expired`, and that's a local-dev-only filesystem convention, not a DB-tracked path (see "Decided: pipeline orchestration" → "File handoff").
 
 **Deliberately not built yet — don't assume these exist or guess at their shape:**

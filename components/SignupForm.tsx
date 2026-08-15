@@ -23,11 +23,12 @@ export default function SignupForm() {
     const formData = new FormData(e.currentTarget);
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
+    const phone = String(formData.get("phone") ?? "");
 
     const res = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, phone }),
     });
     const data = await res.json();
 
@@ -63,6 +64,12 @@ export default function SignupForm() {
           className={inputClass}
         />
         <p className="mt-1 text-xs text-[var(--color-muted)]">At least 8 characters.</p>
+      </div>
+      <div>
+        <label htmlFor="phone" className="block text-sm text-[var(--color-text)] mb-1">
+          Phone number <span className="text-[var(--color-muted)] font-normal">(optional)</span>
+        </label>
+        <input id="phone" name="phone" type="tel" autoComplete="tel" className={inputClass} />
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
