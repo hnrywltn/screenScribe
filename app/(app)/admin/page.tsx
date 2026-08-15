@@ -53,8 +53,8 @@ export default async function AdminPage() {
         <p className="text-xs uppercase tracking-wide text-[var(--color-muted)]">Total revenue</p>
         <p className="mt-1 text-3xl font-semibold text-[var(--color-text)]">${totalRevenue}</p>
         <p className="mt-2 text-xs text-[var(--color-muted)]">
-          Seeded/test data — no live payment processor is connected yet. This will reflect real numbers once billing
-          exists.
+          Includes real Stripe test-mode payments (from `/billing`) alongside earlier seeded demo data — no live
+          (production) payment processor is connected yet.
         </p>
       </div>
 

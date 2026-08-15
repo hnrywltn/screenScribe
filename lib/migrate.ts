@@ -140,6 +140,50 @@ async function migrate() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status TEXT NOT NULL DEFAULT 'active'
     `);
 
+    // Real Stripe billing (2026-08-14). One Stripe Customer per user,
+    // created lazily on first checkout attempt (lib/stripe.ts ->
+    // getOrCreateStripeCustomer), not at signup — most users may never
+    // pay. stripe_subscription_status mirrors Stripe's own
+    // subscription.status values verbatim rather than inventing our own
+    // enum, kept in sync by the webhook handler. cancel_at_period_end is
+    // tracked separately because Stripe keeps status='active' through
+    // the paid period even after a cancellation is requested — only
+    // flipping to 'canceled' once the period actually ends.
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT
+    `);
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT
+    `);
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_status TEXT
+    `);
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS users_stripe_customer_id_idx ON users(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL
+    `);
+    // Which Stripe object (PaymentIntent or Invoice id) produced this
+    // grant, for support/debugging. Nullable — admin_grant rows have
+    // nothing to point to.
+    await client.query(`
+      ALTER TABLE token_grants ADD COLUMN IF NOT EXISTS stripe_reference TEXT
+    `);
+    // Webhook idempotency: Stripe redelivers events on retry, and events
+    // can be manually resent too. This is the claim table that makes
+    // reprocessing a no-op — INSERT ... ON CONFLICT DO NOTHING against
+    // event.id, the same atomic-guard idea as the download route's
+    // claim-before-serve UPDATE, just via INSERT since there's no prior
+    // row to conditionally update.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        processed_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
     await client.query("COMMIT");
     console.log("Migration complete.");
   } catch (err) {

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 const BASE_NAV = [
   { label: "Home", href: "/dashboard", tour: "nav-home" },
   { label: "Sessions", href: "/sessions", tour: "nav-sessions" },
+  { label: "Billing", href: "/billing", tour: "nav-billing" },
 ];
 
 export default function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {

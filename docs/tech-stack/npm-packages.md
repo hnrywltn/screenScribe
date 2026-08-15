@@ -14,6 +14,9 @@ As of the versions pinned in `package.json`. Run `npm ls <pkg>` or check `packag
 | `bcryptjs` | ^3.0.3 | Password hashing for email+password auth (12 rounds) — see `lib/auth.ts` and `CLAUDE.md` → "Decided: auth mechanism" |
 | `jose` | ^6.2.8 | Signs/verifies the session JWT stored in an httpOnly cookie — `lib/auth.ts` |
 | `pg-boss` | ^12.27.0 | Same job queue as the worker package below, added to the **root** package too (2026-08-14) so `app/api/sessions/route.ts` can enqueue jobs (`lib/queue.ts`) — previously only the worker could create a `PgBoss` client. A lazily-started singleton, idempotently ensures the `process-session` queue exists before sending so it doesn't depend on the worker having started first. |
+| `stripe` | ^22.5.0 | Server-side Stripe SDK — `lib/stripe.ts`, the three `app/api/stripe/*` routes, and the webhook handler. Default API version is `2026-07-29.dahlia`; `stripe listen` must be run with `--latest`/`-l` locally or it forwards events shaped for the Stripe account's own (older) default version instead — see `CLAUDE.md` → "Decided: billing". |
+| `@stripe/stripe-js` | ^9.13.0 | Client-side Stripe.js loader (`loadStripe`) — `components/billing/StripeElementsProvider.tsx` |
+| `@stripe/react-stripe-js` | ^6.8.1 | React bindings for Stripe Elements (`Elements`, `PaymentElement`, `useStripe`, `useElements`) — the embedded checkout UI on `/billing`, not Stripe Checkout's hosted redirect |
 
 Not yet added, needed once the pipeline is built: a way to shell out to a local `whisper.cpp` binary (ffmpeg itself is already wired up, see `architecture.md`). **No object-storage SDK needed** — unlike healthReference/patientRecordSystem there's no persistent file storage to talk to (see `architecture.md` → "Storage: bounded, not persistent").
 
@@ -38,6 +41,7 @@ Dev: `typescript` ^7.0.2, `tsx` ^4.23.12 (runs `index.ts` directly, no build ste
 
 - **`ffmpeg`** (v9.0) — installed via Homebrew (`brew install ffmpeg`), **not** an npm dependency, so it doesn't show up in either `package.json`. `worker/lib/ffmpeg.ts` shells out to the `ffmpeg`/`ffprobe` binaries on `PATH`. Installed manually on this dev machine only — the worker's eventual Railway build needs its own step to install it there too (not set up yet, e.g. a `nixpacks.toml` or `apt-get install ffmpeg` in a Dockerfile).
 - **`whisper.cpp`** — planned, not installed yet. See `CLAUDE.md` → "Decided: transcription".
+- **Stripe CLI** — needed locally to forward webhook events (`stripe listen --forward-to localhost:3000/api/webhooks/stripe`) since Stripe can't reach `localhost` directly. Homebrew's bottle install failed here (outdated Xcode, would have required a from-source build) — installed by pulling the prebuilt arm64 binary directly from the [stripe-cli GitHub releases](https://github.com/stripe/stripe-cli/releases) into `~/.local/bin` instead. See `CLAUDE.md` → "Decided: billing".
 
 ## Dev dependencies
 
