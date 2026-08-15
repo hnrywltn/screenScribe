@@ -77,6 +77,42 @@ async function migrate() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT
     `);
 
+    // Admin dashboard (2026-08-14). `is_admin` gates the whole /admin
+    // area — single boolean, not a roles/permissions system, since
+    // there's exactly one admin persona right now (the operator), not a
+    // team with different access levels to model.
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    // Running balance. Nothing deducts from it yet — upload metering
+    // against token_balance isn't built (see CLAUDE.md), so today this
+    // is purely a number an admin can see and add to, not something
+    // that gates anything.
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS token_balance INTEGER NOT NULL DEFAULT 0
+    `);
+    // The ledger: every time tokens are added to a balance, whether by
+    // an admin manually granting them or (once billing is real) by an
+    // actual purchase. `amount_cents` is set for a real/seeded purchase,
+    // NULL for a pure comp/admin grant — that distinction is what lets
+    // the admin page's revenue total mean something real rather than
+    // just summing all token activity regardless of whether money
+    // changed hands.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS token_grants (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        tokens INTEGER NOT NULL,
+        amount_cents INTEGER,
+        source TEXT NOT NULL,
+        note TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS token_grants_user_id_idx ON token_grants(user_id)
+    `);
+
     await client.query("COMMIT");
     console.log("Migration complete.");
   } catch (err) {

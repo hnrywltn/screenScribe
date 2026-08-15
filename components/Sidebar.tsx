@@ -3,14 +3,18 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
-const NAV = [
+const BASE_NAV = [
   { label: "Home", href: "/dashboard", tour: "nav-home" },
   { label: "Sessions", href: "/sessions", tour: "nav-sessions" },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Admin-only, not just hidden — app/(app)/admin/page.tsx re-checks
+  // is_admin server-side regardless of whether this link is visible.
+  const NAV = isAdmin ? [...BASE_NAV, { label: "Admin", href: "/admin", tour: "nav-admin" }] : BASE_NAV;
 
   function isActive(href: string) {
     return pathname.startsWith(href);
