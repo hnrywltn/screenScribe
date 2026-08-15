@@ -24,7 +24,13 @@ export async function POST(request: Request) {
   }
 
   const passwordHash = await hashPassword(newPassword);
-  await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [passwordHash, userId]);
+  // password_changed_at is what getCurrentUserId() compares a session
+  // JWT's iat against — this is what actually invalidates any session
+  // already active elsewhere, not just the password_hash update itself.
+  await pool.query(`UPDATE users SET password_hash = $1, password_changed_at = NOW() WHERE id = $2`, [
+    passwordHash,
+    userId,
+  ]);
 
   // Someone who just proved account ownership via email shouldn't still
   // be locked out of login from their own earlier failed attempts.

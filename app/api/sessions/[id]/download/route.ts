@@ -1,7 +1,9 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { readFile, rm } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { Readable } from "node:stream";
 import pool from "@/lib/db";
 import { getCurrentUserId } from "@/lib/auth";
 import { downloadZipPath } from "@/lib/tempStorage";
@@ -59,9 +61,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   const zipPath = downloadZipPath(id);
-  let fileBuffer: Buffer;
+  let fileSize: number;
   try {
-    fileBuffer = await readFile(zipPath);
+    fileSize = (await stat(zipPath)).size;
   } catch (err) {
     console.error(`download claimed but file missing for session ${id}:`, err);
     return NextResponse.json(
@@ -70,14 +72,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     );
   }
 
+  // Streamed, not buffered into memory — a multi-hundred-MB zip no
+  // longer has to be held whole in server memory to serve it. Safe to
+  // unlink immediately after opening the read stream rather than after
+  // the client finishes downloading: on POSIX (both this Mac and the
+  // Linux Railway target), an open file descriptor keeps the underlying
+  // inode's data readable until the descriptor closes, even after the
+  // directory entry is removed — the stream still reads every byte.
+  const nodeStream = createReadStream(zipPath);
   await rm(zipPath, { force: true });
 
   const safeName = session.original_filename.replace(/[^\w.\- ]/g, "_");
-  return new NextResponse(new Uint8Array(fileBuffer), {
+  return new NextResponse(Readable.toWeb(nodeStream) as ReadableStream, {
     status: 200,
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${safeName}.zip"`,
+      "Content-Length": String(fileSize),
     },
   });
 }

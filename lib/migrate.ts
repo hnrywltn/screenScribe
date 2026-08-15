@@ -226,6 +226,18 @@ async function migrate() {
         ON rate_limit_attempts(key, action, created_at)
     `);
 
+    // Session invalidation on password change (2026-08-14). Nullable —
+    // NULL means the password has never been reset since this column
+    // existed, so no session should be rejected on that basis.
+    // getCurrentUserId() compares a session JWT's own iat against this
+    // to reject any session issued before the most recent reset — the
+    // same live-invalidation trick account_status uses, since sessions
+    // are stateless and otherwise unrelated to password_hash. See
+    // CLAUDE.md -> "Decided: rate limiting & password reset".
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ
+    `);
+
     await client.query("COMMIT");
     console.log("Migration complete.");
   } catch (err) {

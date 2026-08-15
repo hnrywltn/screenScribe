@@ -77,20 +77,35 @@ export async function getCurrentUserId(): Promise<string | null> {
   if (!token) return null;
 
   let userId: string;
+  let issuedAt: number;
   try {
     const { payload } = await jwtVerify(token, secretKey());
     if (payload.purpose !== "session") return null;
     if (typeof payload.userId !== "string") return null;
+    if (typeof payload.iat !== "number") return null;
     userId = payload.userId;
+    issuedAt = payload.iat;
   } catch {
     return null;
   }
 
-  const { rows } = await pool.query<{ account_status: string }>(
-    `SELECT account_status FROM users WHERE id = $1`,
+  const { rows } = await pool.query<{ account_status: string; password_changed_at: string | null }>(
+    `SELECT account_status, password_changed_at FROM users WHERE id = $1`,
     [userId]
   );
   if (rows.length === 0 || rows[0].account_status !== "active") return null;
+
+  // A password reset (see createPasswordResetToken below) can't revoke
+  // this specific JWT the way account_status revokes one via a DB flag
+  // — sessions are stateless and unrelated to password_hash. Comparing
+  // the token's own issue time against the most recent password change
+  // gets the same live-invalidation effect through the same choke
+  // point: any session issued *before* the change is rejected on its
+  // very next request, same as a paused account.
+  if (rows[0].password_changed_at) {
+    const changedAtSeconds = Math.floor(new Date(rows[0].password_changed_at).getTime() / 1000);
+    if (issuedAt < changedAtSeconds) return null;
+  }
 
   return userId;
 }
