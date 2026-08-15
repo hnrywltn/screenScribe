@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserId } from "@/lib/auth";
 import pool from "@/lib/db";
 import GrantTokensForm from "@/components/GrantTokensForm";
+import AccountStatusControl from "@/components/AccountStatusControl";
 
 type UserRow = {
   id: string;
@@ -13,6 +14,7 @@ type UserRow = {
   phone: string | null;
   email_verified_at: string | null;
   is_admin: boolean;
+  account_status: string;
   token_balance: number;
   created_at: string;
   session_count: number;
@@ -35,7 +37,7 @@ export default async function AdminPage() {
 
   const { rows: users } = await pool.query<UserRow>(
     `SELECT
-       u.id, u.email, u.first_name, u.last_name, u.phone, u.email_verified_at, u.is_admin, u.token_balance, u.created_at,
+       u.id, u.email, u.first_name, u.last_name, u.phone, u.email_verified_at, u.is_admin, u.account_status, u.token_balance, u.created_at,
        COALESCE((SELECT COUNT(*) FROM sessions s WHERE s.user_id = u.id), 0)::int AS session_count,
        COALESCE((SELECT SUM(g.amount_cents) FROM token_grants g WHERE g.user_id = u.id), 0)::int AS revenue_cents
      FROM users u
@@ -66,6 +68,7 @@ export default async function AdminPage() {
                 <th className="py-2 pr-4">Email</th>
                 <th className="py-2 pr-4">Phone</th>
                 <th className="py-2 pr-4">Verified</th>
+                <th className="py-2 pr-4">Status</th>
                 <th className="py-2 pr-4">Sessions</th>
                 <th className="py-2 pr-4">Revenue</th>
                 <th className="py-2 pr-4">Tokens</th>
@@ -89,6 +92,9 @@ export default async function AdminPage() {
                   </td>
                   <td className="py-2.5 pr-4 text-[var(--color-muted)]">{u.phone ?? "—"}</td>
                   <td className="py-2.5 pr-4 text-[var(--color-muted)]">{u.email_verified_at ? "Yes" : "No"}</td>
+                  <td className="py-2.5 pr-4">
+                    <AccountStatusControl userId={u.id} currentStatus={u.account_status} disabled={u.id === userId} />
+                  </td>
                   <td className="py-2.5 pr-4 text-[var(--color-text)]">{u.session_count}</td>
                   <td className="py-2.5 pr-4 text-[var(--color-text)]">${(u.revenue_cents / 100).toFixed(2)}</td>
                   <td className="py-2.5 pr-4 text-[var(--color-text)]">{u.token_balance}</td>

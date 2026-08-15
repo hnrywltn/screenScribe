@@ -11,8 +11,8 @@ export async function POST(request: Request) {
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
 
-  const { rows } = await pool.query<{ id: string; password_hash: string }>(
-    `SELECT id, password_hash FROM users WHERE email = $1`,
+  const { rows } = await pool.query<{ id: string; password_hash: string; account_status: string }>(
+    `SELECT id, password_hash, account_status FROM users WHERE email = $1`,
     [email]
   );
 
@@ -25,6 +25,17 @@ export async function POST(request: Request) {
   const valid = await verifyPassword(password, rows[0].password_hash);
   if (!valid) {
     return NextResponse.json(INVALID_CREDENTIALS, { status: 401 });
+  }
+
+  // Checked only *after* the password is confirmed correct — revealing
+  // "this account is paused" to someone who doesn't actually know the
+  // password would be its own small user-enumeration/status leak.
+  if (rows[0].account_status !== "active") {
+    const message =
+      rows[0].account_status === "paused"
+        ? "Your account has been paused. Contact support for help."
+        : "Your account has been revoked.";
+    return NextResponse.json({ error: message }, { status: 403 });
   }
 
   await createSession(rows[0].id);

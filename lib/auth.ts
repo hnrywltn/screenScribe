@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
+import pool from "./db";
 
 const SESSION_COOKIE = "screenscribe_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
@@ -53,18 +54,39 @@ export async function clearSession(): Promise<void> {
 // Handlers. Returns null for a missing, expired, or tampered cookie
 // rather than throwing — callers treat "no session" and "bad session"
 // the same way.
+//
+// Also checked LIVE against the DB, not just the JWT's signature: a
+// paused/revoked account's session token is still cryptographically
+// valid until it expires (30 days), so trusting the token alone would
+// mean pausing/revoking someone only takes effect once they happen to
+// log out or their session naturally expires — not what "pause" or
+// "revoke" should mean. Querying account_status on every call is what
+// makes it take effect on their very next request instead. Every
+// protected route already calls this function, so the enforcement is
+// automatic everywhere rather than something each route has to
+// remember to add separately.
 export async function getCurrentUserId(): Promise<string | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
+  let userId: string;
   try {
     const { payload } = await jwtVerify(token, secretKey());
     if (payload.purpose !== "session") return null;
-    return typeof payload.userId === "string" ? payload.userId : null;
+    if (typeof payload.userId !== "string") return null;
+    userId = payload.userId;
   } catch {
     return null;
   }
+
+  const { rows } = await pool.query<{ account_status: string }>(
+    `SELECT account_status FROM users WHERE id = $1`,
+    [userId]
+  );
+  if (rows.length === 0 || rows[0].account_status !== "active") return null;
+
+  return userId;
 }
 
 // Verification tokens are short-lived JWTs, not stored server-side —

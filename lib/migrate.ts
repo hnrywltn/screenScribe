@@ -127,6 +127,19 @@ async function migrate() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name TEXT
     `);
 
+    // Pause/revoke (2026-08-14). Plain TEXT, no CHECK constraint — same
+    // convention as sessions.status, enforced at the app layer
+    // (app/api/admin/set-account-status/route.ts validates the value).
+    // Values: 'active' / 'paused' / 'revoked'. This is checked LIVE on
+    // every request (lib/auth.ts -> getCurrentUserId queries it, doesn't
+    // just trust the session JWT) — that's what makes pausing/revoking
+    // take effect immediately on an already-logged-in session, despite
+    // sessions being stateless JWTs with no server-side store to
+    // invalidate. See CLAUDE.md -> "Decided: account status".
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status TEXT NOT NULL DEFAULT 'active'
+    `);
+
     await client.query("COMMIT");
     console.log("Migration complete.");
   } catch (err) {
