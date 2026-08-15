@@ -113,6 +113,20 @@ async function migrate() {
       CREATE INDEX IF NOT EXISTS token_grants_user_id_idx ON token_grants(user_id)
     `);
 
+    // Name (2026-08-14). Nullable at the DB level — existing accounts
+    // predate this field and there's no real name to backfill them with
+    // (guessing would be worse than leaving it blank) — but required at
+    // the application level (app/api/auth/signup/route.ts) for every new
+    // signup going forward. Same "nullable column, enforced by the form"
+    // shape as adding any required field to a table that already has
+    // real rows.
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT
+    `);
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name TEXT
+    `);
+
     await client.query("COMMIT");
     console.log("Migration complete.");
   } catch (err) {

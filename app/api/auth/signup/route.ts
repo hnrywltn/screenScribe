@@ -11,6 +11,8 @@ export async function POST(request: Request) {
   const body = await request.json();
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
+  const firstName = typeof body.firstName === "string" ? body.firstName.trim() : "";
+  const lastName = typeof body.lastName === "string" ? body.lastName.trim() : "";
   const phoneRaw = typeof body.phone === "string" ? body.phone.trim() : "";
 
   if (!EMAIL_RE.test(email)) {
@@ -18,6 +20,9 @@ export async function POST(request: Request) {
   }
   if (password.length < 8) {
     return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
+  }
+  if (!firstName || !lastName) {
+    return NextResponse.json({ error: "Enter your first and last name." }, { status: 400 });
   }
 
   // Optional — collecting it as required would sit oddly against the
@@ -38,8 +43,8 @@ export async function POST(request: Request) {
 
   try {
     const { rows } = await pool.query<{ id: string }>(
-      `INSERT INTO users (email, password_hash, phone) VALUES ($1, $2, $3) RETURNING id`,
-      [email, passwordHash, phone]
+      `INSERT INTO users (email, password_hash, phone, first_name, last_name) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [email, passwordHash, phone, firstName, lastName]
     );
     await createSession(rows[0].id);
 

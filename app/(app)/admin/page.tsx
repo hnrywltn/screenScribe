@@ -8,6 +8,8 @@ import GrantTokensForm from "@/components/GrantTokensForm";
 type UserRow = {
   id: string;
   email: string;
+  first_name: string | null;
+  last_name: string | null;
   phone: string | null;
   email_verified_at: string | null;
   is_admin: boolean;
@@ -33,7 +35,7 @@ export default async function AdminPage() {
 
   const { rows: users } = await pool.query<UserRow>(
     `SELECT
-       u.id, u.email, u.phone, u.email_verified_at, u.is_admin, u.token_balance, u.created_at,
+       u.id, u.email, u.first_name, u.last_name, u.phone, u.email_verified_at, u.is_admin, u.token_balance, u.created_at,
        COALESCE((SELECT COUNT(*) FROM sessions s WHERE s.user_id = u.id), 0)::int AS session_count,
        COALESCE((SELECT SUM(g.amount_cents) FROM token_grants g WHERE g.user_id = u.id), 0)::int AS revenue_cents
      FROM users u
@@ -60,6 +62,7 @@ export default async function AdminPage() {
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-[var(--color-muted)] border-b border-[var(--color-border)]">
+                <th className="py-2 pr-4">Name</th>
                 <th className="py-2 pr-4">Email</th>
                 <th className="py-2 pr-4">Phone</th>
                 <th className="py-2 pr-4">Verified</th>
@@ -73,6 +76,9 @@ export default async function AdminPage() {
             <tbody>
               {users.map((u) => (
                 <tr key={u.id} className="border-b border-[var(--color-border)]/60">
+                  <td className="py-2.5 pr-4 text-[var(--color-text)] whitespace-nowrap">
+                    {u.first_name || u.last_name ? `${u.first_name ?? ""} ${u.last_name ?? ""}`.trim() : "—"}
+                  </td>
                   <td className="py-2.5 pr-4 text-[var(--color-text)] whitespace-nowrap">
                     {u.email}
                     {u.is_admin && (

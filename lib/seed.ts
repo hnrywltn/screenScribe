@@ -20,14 +20,20 @@ const DEV_PASSWORD = "devpassword123";
 const DEMO_PASSWORD = "demopassword123";
 const DEMO_USERS: {
   email: string;
+  firstName: string;
+  lastName: string;
   grants: { tokens: number; amountCents: number | null; source: string; note?: string }[];
 }[] = [
   {
     email: "alice@example.com",
+    firstName: "Alice",
+    lastName: "Johnson",
     grants: [{ tokens: 100, amountCents: 1500, source: "subscription", note: "Monthly plan" }],
   },
   {
     email: "bob@example.com",
+    firstName: "Bob",
+    lastName: "Martinez",
     grants: [
       { tokens: 30, amountCents: 600, source: "pay_as_you_go" },
       { tokens: 15, amountCents: 300, source: "pay_as_you_go" },
@@ -35,6 +41,8 @@ const DEMO_USERS: {
   },
   {
     email: "carol@example.com",
+    firstName: "Carol",
+    lastName: "Chen",
     grants: [{ tokens: 50, amountCents: null, source: "admin_grant", note: "Beta tester comp" }],
   },
 ];
@@ -61,11 +69,11 @@ async function seed() {
 
   for (const demo of DEMO_USERS) {
     const { rows } = await pool.query<{ id: string }>(
-      `INSERT INTO users (email, password_hash, email_verified_at)
-       VALUES ($1, $2, NOW())
-       ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash
+      `INSERT INTO users (email, password_hash, email_verified_at, first_name, last_name)
+       VALUES ($1, $2, NOW(), $3, $4)
+       ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name
        RETURNING id`,
-      [demo.email, demoPasswordHash]
+      [demo.email, demoPasswordHash, demo.firstName, demo.lastName]
     );
     const userId = rows[0].id;
 

@@ -23,12 +23,14 @@ export default function SignupForm() {
     const formData = new FormData(e.currentTarget);
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
+    const firstName = String(formData.get("firstName") ?? "");
+    const lastName = String(formData.get("lastName") ?? "");
     const phone = String(formData.get("phone") ?? "");
 
     const res = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, phone }),
+      body: JSON.stringify({ email, password, firstName, lastName, phone }),
     });
     const data = await res.json();
 
@@ -44,6 +46,27 @@ export default function SignupForm() {
 
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="firstName" className="block text-sm text-[var(--color-text)] mb-1">
+            First name
+          </label>
+          <input
+            id="firstName"
+            name="firstName"
+            type="text"
+            required
+            autoComplete="given-name"
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <label htmlFor="lastName" className="block text-sm text-[var(--color-text)] mb-1">
+            Last name
+          </label>
+          <input id="lastName" name="lastName" type="text" required autoComplete="family-name" className={inputClass} />
+        </div>
+      </div>
       <div>
         <label htmlFor="email" className="block text-sm text-[var(--color-text)] mb-1">
           Email
