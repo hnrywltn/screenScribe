@@ -1,7 +1,16 @@
 import Stripe from "stripe";
 import pool from "./db";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+// The Stripe SDK throws synchronously in its constructor if apiKey is
+// falsy — unlike lib/db.ts's Pool, which tolerates an undefined
+// connectionString at construction. That matters because `next build`
+// evaluates route modules (including their imports' top-level code) to
+// collect config, even for routes that are otherwise fully dynamic —
+// so a missing STRIPE_SECRET_KEY at *build* time (not just runtime)
+// used to crash the whole build. The placeholder is never actually
+// used to make a request; only real requests at runtime, when the real
+// env var is present, call this client.
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_build_placeholder");
 
 export default stripe;
 
