@@ -6,9 +6,10 @@ import path from "node:path";
 import pool from "@/lib/db";
 import { getCurrentUserId } from "@/lib/auth";
 import { sendProcessSessionJob } from "@/lib/queue";
-import { uploadDir } from "@/lib/tempStorage";
+import { scratchDir } from "@/lib/tempStorage";
 import { probeDurationSeconds } from "@/lib/ffprobe";
 import { chargeTokens, refundUsageCharge } from "@/lib/tokens";
+import { putObject, deleteObject, uploadKey } from "@/lib/b2";
 
 const MAX_SIZE_BYTES = 2 * 1024 * 1024 * 1024; // 2GB, matches UploadDropzone's client-side check
 
@@ -42,16 +43,20 @@ export async function POST(request: Request) {
     [userId, file.name]
   );
   const sessionId = rows[0].id;
-  const dir = uploadDir(sessionId);
+  // Local-only scratch dir, not a handoff to the worker anymore — just
+  // needed briefly so ffprobe (a local binary) can read the file's
+  // duration before the bytes go to B2.
+  const dir = scratchDir(sessionId);
 
   let filePath: string;
+  let buffer: Buffer;
   try {
     await mkdir(dir, { recursive: true });
     // Buffers the whole file in memory before writing — fine at this
     // scale/stage, but a real memory-pressure concern for large uploads
     // under real concurrent traffic. Streaming straight to disk would
     // avoid it; not built, see docs/tech-stack/architecture.md.
-    const buffer = Buffer.from(await file.arrayBuffer());
+    buffer = Buffer.from(await file.arrayBuffer());
     filePath = path.join(dir, file.name);
     await writeFile(filePath, buffer);
   } catch (err) {
@@ -62,7 +67,8 @@ export async function POST(request: Request) {
 
   // Probe duration before charging anything — an unreadable/corrupt file
   // is a pre-charge failure, never falls through to charging a fallback
-  // amount.
+  // amount. Deliberately probes before uploading to B2 at all, so a
+  // corrupt file never costs a wasted upload.
   let cost: number;
   try {
     const seconds = await probeDurationSeconds(filePath);
@@ -72,6 +78,18 @@ export async function POST(request: Request) {
     await markFailed(sessionId, "That file doesn't look like a valid video.");
     await rm(dir, { recursive: true, force: true });
     return NextResponse.json({ error: "That file doesn't look like a valid video." }, { status: 400 });
+  }
+
+  const key = uploadKey(sessionId, file.name);
+  try {
+    await putObject(key, buffer, file.type);
+  } catch (err) {
+    console.error("Upload failed pushing file to B2:", err);
+    await markFailed(sessionId, "Upload failed on the server — please try again.");
+    return NextResponse.json({ error: "Upload failed — please try again." }, { status: 500 });
+  } finally {
+    // Local copy was only ever needed for ffprobe — gone either way.
+    await rm(dir, { recursive: true, force: true });
   }
 
   // Charge atomically: allowed to go as low as -100 tokens (a shortage
@@ -99,7 +117,7 @@ export async function POST(request: Request) {
     const shortfall = cost - 100 - currentBalance;
     const message = `Not enough tokens for this video — you need ${shortfall} more.`;
     await markFailed(sessionId, message);
-    await rm(dir, { recursive: true, force: true });
+    await deleteObject(key);
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
@@ -122,6 +140,7 @@ export async function POST(request: Request) {
       refundClient.release();
     }
     await markFailed(sessionId, "Upload failed on the server — please try again.");
+    await deleteObject(key);
     return NextResponse.json({ error: "Upload failed — please try again." }, { status: 500 });
   }
 }

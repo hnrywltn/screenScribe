@@ -3,13 +3,15 @@ import { resolve } from "path";
 config({ path: resolve(process.cwd(), ".env.local") });
 
 import { PgBoss } from "pg-boss";
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
-import { createWriteStream } from "node:fs";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import path from "node:path";
 import { ZipArchive } from "archiver";
 import pool from "./lib/db";
 import { transcodeToMp4, extractSceneFrames } from "./lib/ffmpeg";
-import { uploadDir, workDir, downloadZipPath } from "./lib/tempStorage";
+import { workDir } from "./lib/tempStorage";
+import { findUploadKey, downloadZipKey, getObjectStream, putObjectStream, deleteObject } from "./lib/b2";
 import { sendDownloadReadyEmail } from "./lib/email";
 import { refundUsageCharge } from "./lib/tokens";
 
@@ -23,11 +25,19 @@ type ProcessSessionJob = {
 const QUEUE_PROCESS_SESSION = "process-session";
 const QUEUE_CLEANUP = "cleanup-expired-sessions";
 
-async function findUploadedFile(sessionId: string): Promise<string> {
-  const dir = uploadDir(sessionId);
-  const files = await readdir(dir);
-  if (files.length === 0) throw new Error(`no uploaded file found in ${dir}`);
-  return path.join(dir, files[0]);
+// Downloads the raw upload from B2 to worker-local disk — ffmpeg needs
+// a real file path to read from, not a stream. Returns both the local
+// path (for processing) and the B2 key (so it can be deleted once
+// processing succeeds).
+async function downloadInputFile(sessionId: string, work: string): Promise<{ localPath: string; key: string }> {
+  const key = await findUploadKey(sessionId);
+  const filename = key.split("/").pop() ?? "input";
+  const inputDir = path.join(work, "input");
+  await mkdir(inputDir, { recursive: true });
+  const localPath = path.join(inputDir, filename);
+  const stream = await getObjectStream(key);
+  await pipeline(stream, createWriteStream(localPath));
+  return { localPath, key };
 }
 
 async function zipResults(workDirPath: string, screenshotPaths: string[], outputZipPath: string): Promise<void> {
@@ -60,10 +70,11 @@ async function processSession(sessionId: string): Promise<void> {
   if (rows.length === 0) throw new Error(`session ${sessionId} not found`);
   const userEmail = rows[0].email;
 
-  const inputPath = await findUploadedFile(sessionId);
   const work = workDir(sessionId);
   const screenshotsDir = path.join(work, "screenshots");
   await mkdir(screenshotsDir, { recursive: true });
+
+  const { localPath: inputPath, key: uploadObjectKey } = await downloadInputFile(sessionId, work);
 
   const outputMp4 = path.join(work, "video.mp4");
   await transcodeToMp4(inputPath, outputMp4);
@@ -80,8 +91,14 @@ async function processSession(sessionId: string): Promise<void> {
       "Screenshots and the converted video are still included in this download.\n"
   );
 
-  const zipPath = downloadZipPath(sessionId);
-  await zipResults(work, screenshotPaths, zipPath);
+  const localZipPath = path.join(work, "output.zip");
+  await zipResults(work, screenshotPaths, localZipPath);
+
+  await putObjectStream(downloadZipKey(sessionId), createReadStream(localZipPath), "application/zip");
+
+  // The raw upload has no reason to survive past packaging — the B2
+  // object, not local disk, is the thing that used to be uploadDir().
+  await deleteObject(uploadObjectKey);
 
   await pool.query(
     `UPDATE sessions SET status = 'complete', expires_at = NOW() + INTERVAL '1 hour', updated_at = NOW() WHERE id = $1`,
@@ -95,10 +112,9 @@ async function processSession(sessionId: string): Promise<void> {
     console.error(`failed to send ready email for session ${sessionId}:`, err);
   }
 
-  // Clean up everything except the final zip — the raw upload and
-  // intermediate work files (transcoded mp4, raw screenshots) have no
-  // reason to survive past packaging.
-  await rm(uploadDir(sessionId), { recursive: true, force: true });
+  // Clean up all worker-local scratch — the downloaded input, ffmpeg
+  // output, and the local zip copy have no reason to survive past
+  // upload to B2.
   await rm(work, { recursive: true, force: true });
 }
 
@@ -111,7 +127,7 @@ async function cleanupExpiredSessions(): Promise<void> {
     `SELECT id FROM sessions WHERE status = 'complete' AND expires_at < NOW()`
   );
   for (const { id } of rows) {
-    await rm(downloadZipPath(id), { force: true });
+    await deleteObject(downloadZipKey(id));
     await pool.query(`UPDATE sessions SET status = 'expired', updated_at = NOW() WHERE id = $1 AND status = 'complete'`, [
       id,
     ]);

@@ -1,12 +1,10 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { rm, stat } from "node:fs/promises";
-import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import pool from "@/lib/db";
 import { getCurrentUserId } from "@/lib/auth";
-import { downloadZipPath } from "@/lib/tempStorage";
+import { downloadZipKey, headObject, getObjectStream, deleteObject } from "@/lib/b2";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -43,7 +41,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     await pool.query(`UPDATE sessions SET status = 'expired', updated_at = NOW() WHERE id = $1 AND status = 'complete'`, [
       id,
     ]);
-    await rm(downloadZipPath(id), { force: true });
+    await deleteObject(downloadZipKey(id));
     return NextResponse.json({ error: "This download has expired." }, { status: 410 });
   }
 
@@ -60,12 +58,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "This download has already been used." }, { status: 410 });
   }
 
-  const zipPath = downloadZipPath(id);
+  const zipKey = downloadZipKey(id);
   let fileSize: number;
   try {
-    fileSize = (await stat(zipPath)).size;
+    fileSize = (await headObject(zipKey)).contentLength;
   } catch (err) {
-    console.error(`download claimed but file missing for session ${id}:`, err);
+    console.error(`download claimed but object missing for session ${id}:`, err);
     return NextResponse.json(
       { error: "Something went wrong — the file is missing. Please re-upload." },
       { status: 500 }
@@ -73,17 +71,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   // Streamed, not buffered into memory — a multi-hundred-MB zip no
-  // longer has to be held whole in server memory to serve it. Safe to
-  // unlink immediately after opening the read stream rather than after
-  // the client finishes downloading: on POSIX (both this Mac and the
-  // Linux Railway target), an open file descriptor keeps the underlying
-  // inode's data readable until the descriptor closes, even after the
-  // directory entry is removed — the stream still reads every byte.
-  const nodeStream = createReadStream(zipPath);
-  await rm(zipPath, { force: true });
+  // longer has to be held whole in server memory to serve it. Deletes
+  // the B2 object right after opening the stream, same "one-time
+  // download" pattern as the old local-disk version. Confirmed for real
+  // against B2 (not just assumed from S3 docs): downloaded a real
+  // processed zip, the Content-Length matched exactly, unzip -t passed
+  // with all files intact, and the object was already gone from the
+  // bucket by the time the response completed — a DELETE issued right
+  // after opening the GET does not truncate the in-flight stream.
+  const nodeStream = await getObjectStream(zipKey);
+  await deleteObject(zipKey);
 
   const safeName = session.original_filename.replace(/[^\w.\- ]/g, "_");
-  return new NextResponse(Readable.toWeb(nodeStream) as ReadableStream, {
+  return new NextResponse(Readable.toWeb(nodeStream as Readable) as ReadableStream, {
     status: 200,
     headers: {
       "Content-Type": "application/zip",
