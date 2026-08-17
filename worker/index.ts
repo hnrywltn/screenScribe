@@ -9,7 +9,8 @@ import { pipeline } from "node:stream/promises";
 import path from "node:path";
 import { ZipArchive } from "archiver";
 import pool from "./lib/db";
-import { transcodeToMp4, extractSceneFrames } from "./lib/ffmpeg";
+import { transcodeToMp4, extractSceneFrames, extractAudioWav } from "./lib/ffmpeg";
+import { transcribeAudio } from "./lib/whisper";
 import { workDir } from "./lib/tempStorage";
 import { findUploadKey, downloadZipKey, getObjectStream, putObjectStream, deleteObject } from "./lib/b2";
 import { sendDownloadReadyEmail } from "./lib/email";
@@ -81,15 +82,25 @@ async function processSession(sessionId: string): Promise<void> {
 
   const screenshotPaths = await extractSceneFrames(inputPath, screenshotsDir);
 
-  // whisper.cpp isn't installed yet (see CLAUDE.md -> "Decided:
-  // transcription") — write an honest placeholder rather than pretending
-  // transcription happened.
   const transcriptPath = path.join(work, "transcript.txt");
-  await writeFile(
-    transcriptPath,
-    "Transcription is not available yet — this feature is still being built.\n\n" +
-      "Screenshots and the converted video are still included in this download.\n"
-  );
+  try {
+    const audioPath = path.join(work, "audio.wav");
+    await extractAudioWav(inputPath, audioPath);
+    const transcript = await transcribeAudio(audioPath);
+    await writeFile(transcriptPath, transcript + "\n");
+  } catch (err) {
+    // A failed transcription shouldn't fail an otherwise-successful job
+    // — the video and screenshots are still worth delivering. Same
+    // "don't fake it, say so honestly" principle as the old placeholder,
+    // just now covering the failure case specifically rather than
+    // always.
+    console.error(`transcription failed for session ${sessionId}:`, err);
+    await writeFile(
+      transcriptPath,
+      "Transcription failed for this video — this is a known-error case, not a fake transcript.\n\n" +
+        "Screenshots and the converted video are still included in this download.\n"
+    );
+  }
 
   const localZipPath = path.join(work, "output.zip");
   await zipResults(work, screenshotPaths, localZipPath);

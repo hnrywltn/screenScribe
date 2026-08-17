@@ -30,3 +30,7 @@ next-env.d.ts
 
 # local processing scratch (uploaded videos, extracted frames, transcripts)
 /storage/
+
+# whisper.cpp model files (hundreds of MB — baked into the worker's
+# Docker image at build time in production, not committed here)
+worker/models/

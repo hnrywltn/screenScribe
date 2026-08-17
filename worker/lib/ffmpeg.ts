@@ -92,3 +92,21 @@ export async function extractSceneFrames(
     .sort()
     .map((f) => path.join(outputDir, f));
 }
+
+/**
+ * Extracts audio from `inputPath` to a 16kHz mono WAV at `outputPath` —
+ * the exact format whisper.cpp expects (see worker/lib/whisper.ts). A
+ * separate step from transcodeToMp4 since the mp4's own AAC audio
+ * stream isn't in a format whisper.cpp can read directly.
+ */
+export function extractAudioWav(inputPath: string, outputPath: string): Promise<void> {
+  return runFfmpeg([
+    "-y",
+    "-i", inputPath,
+    "-vn",
+    "-ar", "16000",
+    "-ac", "1",
+    "-c:a", "pcm_s16le",
+    outputPath,
+  ]);
+}
