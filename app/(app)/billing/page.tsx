@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserId } from "@/lib/auth";
 import pool from "@/lib/db";
 import { TOKEN_PACKS, TokenPackId } from "@/lib/tokenPacks";
-import BuyPackButton from "@/components/billing/BuyPackButton";
+import TokenPacksSection from "@/components/billing/TokenPacksSection";
 import SubscribeButton from "@/components/billing/SubscribeButton";
 import CancelSubscriptionButton from "@/components/billing/CancelSubscriptionButton";
 
@@ -57,18 +57,12 @@ export default async function BillingPage() {
         <h2 className="font-medium text-[var(--color-text)]">Buy tokens</h2>
         <p className="mt-1 text-sm text-[var(--color-muted)]">$0.20/token, one-time purchase.</p>
 
-        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {(Object.entries(TOKEN_PACKS) as [TokenPackId, (typeof TOKEN_PACKS)[TokenPackId]][]).map(
-            ([packId, pack]) => (
-              <div key={packId} className="border border-[var(--color-border)] rounded-xl p-4 text-center">
-                <p className="font-medium text-[var(--color-text)]">{pack.label}</p>
-                <p className="text-sm text-[var(--color-muted)]">${(pack.amountCents / 100).toFixed(2)}</p>
-                <div className="mt-3">
-                  <BuyPackButton packId={packId} label={pack.label} />
-                </div>
-              </div>
-            )
-          )}
+        <div className="mt-4">
+          <TokenPacksSection
+            packs={(Object.entries(TOKEN_PACKS) as [TokenPackId, (typeof TOKEN_PACKS)[TokenPackId]][]).map(
+              ([packId, pack]) => ({ packId, label: pack.label, amountCents: pack.amountCents })
+            )}
+          />
         </div>
       </div>
     </div>
