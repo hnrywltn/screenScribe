@@ -6,10 +6,15 @@ import { getCurrentUserId } from "@/lib/auth";
 import AutoRefresh from "@/components/AutoRefresh";
 import ExtendSessionButton from "@/components/ExtendSessionButton";
 import ActiveUploadRow from "@/components/ActiveUploadRow";
+import SessionStageProgress from "@/components/SessionStageProgress";
 
 const STATUS_LABEL: Record<string, string> = {
   queued: "Queued",
   processing: "Processing…",
+  transcoding: "Transcoding…",
+  detecting_scenes: "Detecting scenes…",
+  transcribing: "Transcribing…",
+  packaging: "Packaging…",
   complete: "Ready to download",
   downloaded: "Downloaded",
   expired: "Expired",
@@ -53,6 +58,7 @@ export default async function SessionsPage() {
                     <> · Ready — download by {new Date(s.expires_at).toLocaleTimeString()}</>
                   )}
                 </p>
+                <SessionStageProgress status={s.status} />
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 <span className="text-xs uppercase tracking-wide text-[var(--color-muted)]">

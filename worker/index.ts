@@ -61,8 +61,18 @@ async function zipResults(workDirPath: string, screenshotPaths: string[], output
   });
 }
 
+// Real per-stage status, not just a single "processing" catch-all — the
+// Sessions page uses these exact values to drive an animated stepper
+// (SessionStageProgress.tsx). sessions.status has always been plain
+// TEXT with no CHECK constraint specifically so intermediate values
+// like these could be added later without a migration — see CLAUDE.md
+// "Decided: pipeline orchestration".
+async function setStatus(sessionId: string, status: string): Promise<void> {
+  await pool.query(`UPDATE sessions SET status = $2, updated_at = NOW() WHERE id = $1`, [sessionId, status]);
+}
+
 async function processSession(sessionId: string): Promise<void> {
-  await pool.query(`UPDATE sessions SET status = 'processing', updated_at = NOW() WHERE id = $1`, [sessionId]);
+  await setStatus(sessionId, "processing");
 
   const { rows } = await pool.query<{ email: string }>(
     `SELECT u.email FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = $1`,
@@ -77,11 +87,14 @@ async function processSession(sessionId: string): Promise<void> {
 
   const { localPath: inputPath, key: uploadObjectKey } = await downloadInputFile(sessionId, work);
 
+  await setStatus(sessionId, "transcoding");
   const outputMp4 = path.join(work, "video.mp4");
   await transcodeToMp4(inputPath, outputMp4);
 
+  await setStatus(sessionId, "detecting_scenes");
   const screenshotPaths = await extractSceneFrames(inputPath, screenshotsDir);
 
+  await setStatus(sessionId, "transcribing");
   const transcriptPath = path.join(work, "transcript.txt");
   try {
     const audioPath = path.join(work, "audio.wav");
@@ -102,6 +115,7 @@ async function processSession(sessionId: string): Promise<void> {
     );
   }
 
+  await setStatus(sessionId, "packaging");
   const localZipPath = path.join(work, "output.zip");
   await zipResults(work, screenshotPaths, localZipPath);
 
