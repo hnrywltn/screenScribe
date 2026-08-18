@@ -8,16 +8,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const userId = await getCurrentUserId();
   if (!userId) redirect("/login");
 
-  const { rows } = await pool.query<{ email_verified_at: string | null; is_admin: boolean }>(
-    `SELECT email_verified_at, is_admin FROM users WHERE id = $1`,
+  const { rows } = await pool.query<{ email_verified_at: string | null; is_admin: boolean; token_balance: number }>(
+    `SELECT email_verified_at, is_admin, token_balance FROM users WHERE id = $1`,
     [userId]
   );
   // const isVerified = Boolean(rows[0]?.email_verified_at);
   const isAdmin = Boolean(rows[0]?.is_admin);
+  const tokenBalance = rows[0]?.token_balance ?? 0;
 
   return (
     <div className="h-full flex flex-col md:flex-row">
-      <Sidebar isAdmin={isAdmin} />
+      <Sidebar isAdmin={isAdmin} tokenBalance={tokenBalance} />
       <main className="flex-1 overflow-y-auto min-w-0 flex flex-col">
         {/* Banner disabled until a Resend sending domain is verified —
             right now it nags every unverified user with an email that

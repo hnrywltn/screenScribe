@@ -9,7 +9,7 @@ const BASE_NAV = [
   { label: "Billing", href: "/billing", tour: "nav-billing" },
 ];
 
-export default function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
+export default function Sidebar({ isAdmin = false, tokenBalance = 0 }: { isAdmin?: boolean; tokenBalance?: number }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -35,6 +35,12 @@ export default function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
           ScreenScribe
         </Link>
         <nav className="flex items-center gap-1">
+          <Link
+            href="/billing"
+            className="px-3 py-1.5 rounded-lg text-sm text-white/60 hover:text-white hover:bg-white/8 transition-colors"
+          >
+            {tokenBalance} tokens
+          </Link>
           {NAV.map((item) => (
             <Link
               key={item.href}
@@ -81,6 +87,13 @@ export default function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
         </nav>
 
         <div className="px-3 py-4 border-t border-white/10">
+          <Link
+            href="/billing"
+            className="block px-3 py-2 mb-1 rounded-lg text-sm hover:bg-white/8 transition-colors"
+          >
+            <p className="text-xs text-white/40 uppercase tracking-wide">Tokens</p>
+            <p className="text-white font-semibold">{tokenBalance}</p>
+          </Link>
           <button
             onClick={logOut}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/60 hover:text-white hover:bg-white/8 transition-colors"
