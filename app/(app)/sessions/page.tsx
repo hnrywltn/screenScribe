@@ -5,6 +5,7 @@ import pool from "@/lib/db";
 import { getCurrentUserId } from "@/lib/auth";
 import AutoRefresh from "@/components/AutoRefresh";
 import ExtendSessionButton from "@/components/ExtendSessionButton";
+import ActiveUploadRow from "@/components/ActiveUploadRow";
 
 const STATUS_LABEL: Record<string, string> = {
   queued: "Queued",
@@ -33,11 +34,13 @@ export default async function SessionsPage() {
         good.
       </p>
 
-      {sessions.length === 0 ? (
-        <p className="text-sm text-[var(--color-muted)] mt-4">No sessions yet — upload a recording to get started.</p>
-      ) : (
-        <div className="mt-6 space-y-2">
-          {sessions.map((s) => (
+      <div className="mt-6 space-y-2">
+        <ActiveUploadRow />
+
+        {sessions.length === 0 ? (
+          <p className="text-sm text-[var(--color-muted)]">No sessions yet — upload a recording to get started.</p>
+        ) : (
+          sessions.map((s) => (
             <div
               key={s.id}
               className="bg-white rounded-xl border border-[var(--color-border)] px-4 py-3 flex items-center justify-between gap-3"
@@ -66,9 +69,9 @@ export default async function SessionsPage() {
                 )}
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
     </div>
   );
 }
