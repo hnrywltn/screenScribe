@@ -20,7 +20,7 @@ const STEPS: DriveStep[] = [
   {
     element: () => visibleElement('[data-tour="brand"]') as Element,
     popover: {
-      title: "ScreenScribe",
+      title: "StudyBeacon",
       description: "This logo always brings you back to the dashboard.",
     },
   },

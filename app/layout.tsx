@@ -5,7 +5,7 @@ import "./globals.css";
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
 
 export const metadata: Metadata = {
-  title: "ScreenScribe",
+  title: "StudyBeacon",
   description: "Turn a recorded screen/lecture video into screenshots, a transcript, and an mp4 — packaged per session.",
 };
 

@@ -24,7 +24,7 @@ async function migrate() {
     `);
 
     // Deliberately NOT a record of what was processed — just a usage log.
-    // ScreenScribe doesn't keep the uploaded video, extracted screenshots,
+    // StudyBeacon doesn't keep the uploaded video, extracted screenshots,
     // or transcript once the zip has been streamed back to the user
     // (ephemeral temp dir, deleted after the response finishes), so
     // there's nothing here to re-download and no video_key/image_key

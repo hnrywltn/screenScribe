@@ -32,7 +32,7 @@ export default function Sidebar({ isAdmin = false, tokenBalance = 0 }: { isAdmin
       {/* Mobile top bar (below md) */}
       <header className="md:hidden shrink-0 bg-[var(--color-sidebar)] border-b border-white/10 px-4 py-3 flex items-center justify-between gap-3">
         <Link href="/dashboard" data-tour="brand" className="text-white/40 text-xs uppercase tracking-widest font-medium hover:opacity-80 transition-opacity shrink-0">
-          ScreenScribe
+          StudyBeacon
         </Link>
         <nav className="flex items-center gap-1">
           <Link
@@ -66,7 +66,7 @@ export default function Sidebar({ isAdmin = false, tokenBalance = 0 }: { isAdmin
       <aside className="hidden md:flex shrink-0 w-56 bg-[var(--color-sidebar)] min-h-screen flex-col">
         <div className="border-b border-white/10 px-5 py-6">
           <Link href="/dashboard" data-tour="brand" className="block hover:opacity-80 transition-opacity">
-            <p className="text-white/40 text-xs uppercase tracking-widest font-medium">ScreenScribe</p>
+            <p className="text-white/40 text-xs uppercase tracking-widest font-medium">StudyBeacon</p>
           </Link>
         </div>
 

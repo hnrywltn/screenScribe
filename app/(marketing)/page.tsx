@@ -13,7 +13,7 @@ export default function MarketingHomePage() {
           Turn any recorded lecture into study-ready notes
         </h1>
         <p className="mt-5 text-lg text-[var(--color-muted)] max-w-2xl mx-auto">
-          Upload a recorded presentation or screen share. ScreenScribe gives you back a screenshot of every slide, a
+          Upload a recorded presentation or screen share. StudyBeacon gives you back a screenshot of every slide, a
           full transcript, and the video converted to .mp4 — packaged into one download.
         </p>
         <div className="mt-8 flex items-center justify-center gap-3">

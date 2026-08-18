@@ -8,7 +8,7 @@ export default async function MarketingLayout({ children }: { children: React.Re
     <div className="min-h-full flex flex-col">
       <header className="border-b border-[var(--color-border)] px-4 sm:px-8 py-4 flex items-center justify-between">
         <Link href="/" className="text-xs uppercase tracking-widest font-medium text-[var(--color-text)]">
-          ScreenScribe
+          StudyBeacon
         </Link>
         {userId ? (
           <Link

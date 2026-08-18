@@ -6,7 +6,7 @@ const RESEND_API_URL = "https://api.resend.com/emails";
 // Resend's shared test sender — works without a verified custom domain,
 // but only delivers to the Resend account's own verified address. Swap
 // for a real "from" once a domain is verified with Resend.
-const FROM_ADDRESS = "ScreenScribe <onboarding@resend.dev>";
+const FROM_ADDRESS = "StudyBeacon <onboarding@resend.dev>";
 
 export async function sendVerificationEmail(to: string, token: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
@@ -27,7 +27,7 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
     body: JSON.stringify({
       from: FROM_ADDRESS,
       to,
-      subject: "Verify your ScreenScribe email",
+      subject: "Verify your StudyBeacon email",
       html:
         `<p>Confirm your email so you don't miss download-ready notifications.</p>` +
         `<p><a href="${verifyUrl}">Verify your email</a> — this link expires in 24 hours.</p>`,
@@ -60,7 +60,7 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
     body: JSON.stringify({
       from: FROM_ADDRESS,
       to,
-      subject: "Reset your ScreenScribe password",
+      subject: "Reset your StudyBeacon password",
       html:
         `<p>Someone requested a password reset for this account. If that wasn't you, ignore this email.</p>` +
         `<p><a href="${resetUrl}">Reset your password</a> — this link expires in 30 minutes.</p>`,

@@ -2,7 +2,7 @@ const RESEND_API_URL = "https://api.resend.com/emails";
 // Resend's shared test sender — works without a verified custom domain,
 // but only delivers to the Resend account's own verified address. Swap
 // for a real "from" once a domain is verified with Resend.
-const FROM_ADDRESS = "ScreenScribe <onboarding@resend.dev>";
+const FROM_ADDRESS = "StudyBeacon <onboarding@resend.dev>";
 
 export async function sendDownloadReadyEmail(to: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
@@ -23,7 +23,7 @@ export async function sendDownloadReadyEmail(to: string): Promise<void> {
     body: JSON.stringify({
       from: FROM_ADDRESS,
       to,
-      subject: "Your ScreenScribe download is ready",
+      subject: "Your StudyBeacon download is ready",
       html: `<p>Your video has finished processing. <a href="${downloadUrl}">Download it here</a> — this link stays available for 1 hour.</p>`,
     }),
   });
