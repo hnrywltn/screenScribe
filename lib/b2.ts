@@ -5,6 +5,8 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
+import { Upload } from "@aws-sdk/lib-storage";
+import type { Readable } from "node:stream";
 
 // B2's S3-compatible endpoint embeds the region, e.g.
 // s3.us-west-004.backblazeb2.com -> us-west-004. Falling back to a
@@ -39,6 +41,16 @@ export async function putObject(key: string, body: Buffer, contentType?: string)
   await client.send(
     new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: body, ContentLength: body.length, ContentType: contentType })
   );
+}
+
+// Streamed multipart upload via @aws-sdk/lib-storage's Upload — unlike
+// PutObjectCommand, it doesn't need the full body size known upfront,
+// so a large upload never has to be buffered whole into memory just to
+// compute a Content-Length. Mirrors worker/lib/b2.ts's putObjectStream
+// (deliberately duplicated, not shared — separate packages).
+export async function putObjectStream(key: string, body: Readable, contentType?: string): Promise<void> {
+  const upload = new Upload({ client, params: { Bucket: BUCKET, Key: key, Body: body, ContentType: contentType } });
+  await upload.done();
 }
 
 export async function headObject(key: string): Promise<{ contentLength: number }> {

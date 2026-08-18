@@ -3,11 +3,11 @@
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const MAX_SIZE_BYTES = 2 * 1024 * 1024 * 1024; // 2GB — matches the server-side check
+const MAX_SIZE_BYTES = 6 * 1024 * 1024 * 1024; // 6GB — headroom above the ~5GB real-world ceiling; matches the server-side check
 
 function validate(file: File): string | null {
   if (!file.type.startsWith("video/")) return "Please choose a video file.";
-  if (file.size > MAX_SIZE_BYTES) return "That file is too large — max 2GB for now.";
+  if (file.size > MAX_SIZE_BYTES) return "That file is too large — max 6GB for now.";
   return null;
 }
 
@@ -49,9 +49,6 @@ export default function UploadProvider({ children }: { children: React.ReactNode
       setError(null);
       setActiveUpload({ filename: file.name, progress: 0 });
 
-      const formData = new FormData();
-      formData.append("video", file);
-
       const xhr = new XMLHttpRequest();
       xhrRef.current = xhr;
 
@@ -87,7 +84,15 @@ export default function UploadProvider({ children }: { children: React.ReactNode
         setActiveUpload(null);
       });
       xhr.open("POST", "/api/sessions");
-      xhr.send(formData);
+      // Raw body, not multipart/form-data — the server streams this
+      // straight to disk and on to B2 rather than buffering the whole
+      // file in memory (which multipart parsing would require). The
+      // filename travels as a header since there's no form field to
+      // carry it; encodeURIComponent keeps it ASCII-safe for the header
+      // value, decoded back to the real name server-side.
+      xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+      xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+      xhr.send(file);
 
       // Send the user straight to the queue, where they can watch
       // progress and cancel — replaces the old "redirect once it

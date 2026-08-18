@@ -1,7 +1,10 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import path from "node:path";
 import pool from "@/lib/db";
 import { getCurrentUserId } from "@/lib/auth";
@@ -9,9 +12,10 @@ import { sendProcessSessionJob } from "@/lib/queue";
 import { scratchDir } from "@/lib/tempStorage";
 import { probeDurationSeconds } from "@/lib/ffprobe";
 import { chargeTokens, refundUsageCharge } from "@/lib/tokens";
-import { putObject, deleteObject, uploadKey } from "@/lib/b2";
+import { putObjectStream, deleteObject, uploadKey } from "@/lib/b2";
 
-const MAX_SIZE_BYTES = 2 * 1024 * 1024 * 1024; // 2GB, matches UploadDropzone's client-side check
+const MAX_SIZE_BYTES = 6 * 1024 * 1024 * 1024; // 6GB — headroom above the ~5GB real-world ceiling; matches the client-side check
+const MAX_SIZE_MESSAGE = "That file is too large — max 6GB for now.";
 
 async function markFailed(sessionId: string, message: string) {
   await pool.query(`UPDATE sessions SET status = 'failed', error_message = $2, updated_at = NOW() WHERE id = $1`, [
@@ -26,21 +30,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not logged in." }, { status: 401 });
   }
 
-  const formData = await request.formData();
-  const file = formData.get("video");
-  if (!(file instanceof File)) {
+  // Raw streamed body, not multipart/form-data — form-data parsing
+  // (request.formData()) buffers the entire file into memory before
+  // handing it back, which is exactly what streaming straight to disk
+  // is meant to avoid at multi-GB scale. The filename travels as a
+  // header instead of a form field (see components/UploadProvider.tsx).
+  if (!request.body) {
     return NextResponse.json({ error: "No video file provided." }, { status: 400 });
   }
-  if (!file.type.startsWith("video/")) {
+  const filenameHeader = request.headers.get("x-filename");
+  const filename = filenameHeader ? decodeURIComponent(filenameHeader) : null;
+  if (!filename) {
+    return NextResponse.json({ error: "No video file provided." }, { status: 400 });
+  }
+  const contentType = request.headers.get("content-type") ?? "";
+  if (!contentType.startsWith("video/")) {
     return NextResponse.json({ error: "Please upload a video file." }, { status: 400 });
   }
-  if (file.size > MAX_SIZE_BYTES) {
-    return NextResponse.json({ error: "That file is too large — max 2GB for now." }, { status: 400 });
+  // A cheap upfront rejection when the browser sends Content-Length (it
+  // always does for a File body — the size is known, no chunked
+  // encoding needed) — avoids receiving any bytes for an obviously
+  // oversized file. Not the only guard: the actual written size is
+  // checked again after streaming to disk, in case this header is ever
+  // missing or wrong.
+  const contentLengthHeader = request.headers.get("content-length");
+  const contentLength = contentLengthHeader ? parseInt(contentLengthHeader, 10) : null;
+  if (contentLength !== null && contentLength > MAX_SIZE_BYTES) {
+    return NextResponse.json({ error: MAX_SIZE_MESSAGE }, { status: 400 });
   }
 
   const { rows } = await pool.query<{ id: string }>(
     `INSERT INTO sessions (user_id, original_filename) VALUES ($1, $2) RETURNING id`,
-    [userId, file.name]
+    [userId, filename]
   );
   const sessionId = rows[0].id;
   // Local-only scratch dir, not a handoff to the worker anymore — just
@@ -49,20 +70,25 @@ export async function POST(request: Request) {
   const dir = scratchDir(sessionId);
 
   let filePath: string;
-  let buffer: Buffer;
   try {
     await mkdir(dir, { recursive: true });
-    // Buffers the whole file in memory before writing — fine at this
-    // scale/stage, but a real memory-pressure concern for large uploads
-    // under real concurrent traffic. Streaming straight to disk would
-    // avoid it; not built, see docs/tech-stack/architecture.md.
-    buffer = Buffer.from(await file.arrayBuffer());
-    filePath = path.join(dir, file.name);
-    await writeFile(filePath, buffer);
+    filePath = path.join(dir, filename);
+    const nodeStream = Readable.fromWeb(request.body as import("node:stream/web").ReadableStream<Uint8Array>);
+    await pipeline(nodeStream, createWriteStream(filePath));
   } catch (err) {
     console.error("Upload failed writing file to disk:", err);
     await markFailed(sessionId, "Upload failed on the server — please try again.");
+    await rm(dir, { recursive: true, force: true });
     return NextResponse.json({ error: "Upload failed — please try again." }, { status: 500 });
+  }
+
+  // Defense-in-depth: confirm what actually landed on disk, in case
+  // Content-Length was missing or understated.
+  const { size: writtenSize } = await stat(filePath);
+  if (writtenSize > MAX_SIZE_BYTES) {
+    await markFailed(sessionId, MAX_SIZE_MESSAGE);
+    await rm(dir, { recursive: true, force: true });
+    return NextResponse.json({ error: MAX_SIZE_MESSAGE }, { status: 400 });
   }
 
   // Probe duration before charging anything — an unreadable/corrupt file
@@ -80,9 +106,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "That file doesn't look like a valid video." }, { status: 400 });
   }
 
-  const key = uploadKey(sessionId, file.name);
+  const key = uploadKey(sessionId, filename);
   try {
-    await putObject(key, buffer, file.type);
+    await putObjectStream(key, createReadStream(filePath), contentType);
   } catch (err) {
     console.error("Upload failed pushing file to B2:", err);
     await markFailed(sessionId, "Upload failed on the server — please try again.");

@@ -53,7 +53,7 @@ export default function UploadDropzone() {
       >
         <Upload className="w-8 h-8 mx-auto text-[var(--color-muted)] mb-3" />
         <p className="text-sm font-medium text-[var(--color-text)]">Drag and drop a video, or click to browse</p>
-        <p className="text-xs text-[var(--color-muted)] mt-1">Up to 2GB</p>
+        <p className="text-xs text-[var(--color-muted)] mt-1">Up to 6GB</p>
         <input
           ref={inputRef}
           type="file"
