@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserId } from "@/lib/auth";
 import pool from "@/lib/db";
 import Sidebar from "@/components/Sidebar";
-import VerifyEmailBanner from "@/components/VerifyEmailBanner";
+// import VerifyEmailBanner from "@/components/VerifyEmailBanner";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const userId = await getCurrentUserId();
@@ -12,14 +12,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     `SELECT email_verified_at, is_admin FROM users WHERE id = $1`,
     [userId]
   );
-  const isVerified = Boolean(rows[0]?.email_verified_at);
+  // const isVerified = Boolean(rows[0]?.email_verified_at);
   const isAdmin = Boolean(rows[0]?.is_admin);
 
   return (
     <div className="h-full flex flex-col md:flex-row">
       <Sidebar isAdmin={isAdmin} />
       <main className="flex-1 overflow-y-auto min-w-0 flex flex-col">
-        {!isVerified && <VerifyEmailBanner />}
+        {/* Banner disabled until a Resend sending domain is verified —
+            right now it nags every unverified user with an email that
+            can never actually arrive. Re-enable by uncommenting this
+            and the two lines above once that's fixed. */}
         <div className="flex-1">{children}</div>
       </main>
     </div>
