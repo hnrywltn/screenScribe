@@ -72,7 +72,7 @@ FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       python3 python3-pip ca-certificates \
+       python3 python3-pip ca-certificates libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Whole ffmpeg install tree (bin + the shared libs it built against,
