@@ -20,7 +20,7 @@ FROM nvidia/cuda:12.4.1-devel-ubuntu22.04 AS builder
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       build-essential cmake git pkg-config yasm nasm curl ca-certificates \
+       build-essential cmake git pkg-config yasm nasm curl ca-certificates zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # nv-codec-headers: just the headers ffmpeg's ./configure needs to detect
@@ -45,6 +45,7 @@ RUN ./configure \
       --enable-nvenc \
       --enable-cuvid \
       --enable-libnpp \
+      --enable-zlib \
       --extra-cflags=-I/usr/local/cuda/include \
       --extra-ldflags=-L/usr/local/cuda/lib64 \
       --disable-doc \
