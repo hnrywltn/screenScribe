@@ -85,9 +85,16 @@ COPY --from=builder /whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper-cl
 COPY --from=builder /models/ggml-medium-q5_0.bin /app/models/ggml-medium-q5_0.bin
 
 WORKDIR /app
-COPY requirements.txt .
+# RunPod's GitHub-deploy build uses the repo root as the build context,
+# not this directory — even though the Dockerfile itself lives here —
+# so these paths have to be spelled out from the repo root, unlike
+# ../Dockerfile's plain `COPY . .` (Railway lets you set worker/ as the
+# service's own root directory, so its context really is worker/).
+# Confirmed empirically: the bare `COPY handler.py .` version failed
+# RunPod's build with "/handler.py": not found.
+COPY worker/runpod-handler/requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
-COPY handler.py .
+COPY worker/runpod-handler/handler.py .
 
 ENV WHISPER_MODEL_PATH=/app/models/ggml-medium-q5_0.bin
 ENV WHISPER_BINARY=whisper-cli
