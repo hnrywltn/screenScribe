@@ -34,3 +34,7 @@ next-env.d.ts
 # whisper.cpp model files (hundreds of MB — baked into the worker's
 # Docker image at build time in production, not committed here)
 worker/models/
+
+# Python bytecode cache (worker/runpod-handler/ is a Python package)
+__pycache__/
+*.pyc

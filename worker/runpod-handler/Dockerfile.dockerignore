@@ -1,0 +1,16 @@
+# Overrides the root .dockerignore for this specific Dockerfile (same
+# directory as the Dockerfile itself — BuildKit's documented convention
+# since Docker Engine 23.0). The root one has a bare `worker` line,
+# correct for the other two Dockerfiles (root Dockerfile / worker/Dockerfile)
+# to keep their build contexts small, but wrong here: RunPod's GitHub-deploy
+# build uses the repo root as context, and this Dockerfile needs files
+# under worker/runpod-handler/ — the root ignore file would exclude them
+# entirely. Confirmed empirically: handler.py's COPY failed as "not found"
+# with the root .dockerignore in effect.
+node_modules
+.git
+.next
+.env*
+docs
+*.log
+worker/models
