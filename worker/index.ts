@@ -3,16 +3,9 @@ import { resolve } from "path";
 config({ path: resolve(process.cwd(), ".env.local") });
 
 import { PgBoss } from "pg-boss";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { createReadStream, createWriteStream } from "node:fs";
-import { pipeline } from "node:stream/promises";
-import path from "node:path";
-import { ZipArchive } from "archiver";
 import pool from "./lib/db";
-import { transcodeToMp4, extractSceneFrames, extractAudioWav } from "./lib/ffmpeg";
-import { transcribeAudio } from "./lib/whisper";
-import { workDir } from "./lib/tempStorage";
-import { findUploadKey, downloadZipKey, getObjectStream, putObjectStream, deleteObject } from "./lib/b2";
+import { downloadZipKey, deleteObject } from "./lib/b2";
+import { runGpuPipeline } from "./lib/runpod";
 import { sendDownloadReadyEmail } from "./lib/email";
 import { refundUsageCharge } from "./lib/tokens";
 
@@ -26,47 +19,15 @@ type ProcessSessionJob = {
 const QUEUE_PROCESS_SESSION = "process-session";
 const QUEUE_CLEANUP = "cleanup-expired-sessions";
 
-// Downloads the raw upload from B2 to worker-local disk — ffmpeg needs
-// a real file path to read from, not a stream. Returns both the local
-// path (for processing) and the B2 key (so it can be deleted once
-// processing succeeds).
-async function downloadInputFile(sessionId: string, work: string): Promise<{ localPath: string; key: string }> {
-  const key = await findUploadKey(sessionId);
-  const filename = key.split("/").pop() ?? "input";
-  const inputDir = path.join(work, "input");
-  await mkdir(inputDir, { recursive: true });
-  const localPath = path.join(inputDir, filename);
-  const stream = await getObjectStream(key);
-  await pipeline(stream, createWriteStream(localPath));
-  return { localPath, key };
-}
-
-async function zipResults(workDirPath: string, screenshotPaths: string[], outputZipPath: string): Promise<void> {
-  await mkdir(path.dirname(outputZipPath), { recursive: true });
-
-  await new Promise<void>((resolvePromise, reject) => {
-    const output = createWriteStream(outputZipPath);
-    const archive = new ZipArchive({ zlib: { level: 9 } });
-
-    output.on("close", () => resolvePromise());
-    archive.on("error", (err) => reject(err));
-
-    archive.pipe(output);
-    archive.file(path.join(workDirPath, "video.mp4"), { name: "video.mp4" });
-    archive.file(path.join(workDirPath, "transcript.txt"), { name: "transcript.txt" });
-    for (const screenshotPath of screenshotPaths) {
-      archive.file(screenshotPath, { name: `screenshots/${path.basename(screenshotPath)}` });
-    }
-    archive.finalize();
-  });
-}
-
-// Real per-stage status, not just a single "processing" catch-all — the
-// Sessions page uses these exact values to drive an animated stepper
-// (SessionStageProgress.tsx). sessions.status has always been plain
-// TEXT with no CHECK constraint specifically so intermediate values
-// like these could be added later without a migration — see CLAUDE.md
-// "Decided: pipeline orchestration".
+// sessions.status is plain TEXT with no CHECK constraint specifically so
+// values could be added/changed without a migration — see CLAUDE.md
+// "Decided: pipeline orchestration". Used to carry granular per-stage
+// values (transcoding/detecting_scenes/transcribing/packaging) driving
+// the Sessions page's animated stepper (SessionStageProgress.tsx); now
+// that the pipeline runs as one opaque RunPod job (see processSession
+// below), there's no visibility into which internal step it's on, so it
+// stays "processing" for the whole duration instead — a real, known
+// regression in that stepper's granularity, not an oversight.
 async function setStatus(sessionId: string, status: string): Promise<void> {
   await pool.query(`UPDATE sessions SET status = $2, updated_at = NOW() WHERE id = $1`, [sessionId, status]);
 }
@@ -81,49 +42,12 @@ async function processSession(sessionId: string): Promise<void> {
   if (rows.length === 0) throw new Error(`session ${sessionId} not found`);
   const userEmail = rows[0].email;
 
-  const work = workDir(sessionId);
-  const screenshotsDir = path.join(work, "screenshots");
-  await mkdir(screenshotsDir, { recursive: true });
-
-  const { localPath: inputPath, key: uploadObjectKey } = await downloadInputFile(sessionId, work);
-
-  await setStatus(sessionId, "transcoding");
-  const outputMp4 = path.join(work, "video.mp4");
-  await transcodeToMp4(inputPath, outputMp4);
-
-  await setStatus(sessionId, "detecting_scenes");
-  const screenshotPaths = await extractSceneFrames(inputPath, screenshotsDir);
-
-  await setStatus(sessionId, "transcribing");
-  const transcriptPath = path.join(work, "transcript.txt");
-  try {
-    const audioPath = path.join(work, "audio.wav");
-    await extractAudioWav(inputPath, audioPath);
-    const transcript = await transcribeAudio(audioPath);
-    await writeFile(transcriptPath, transcript + "\n");
-  } catch (err) {
-    // A failed transcription shouldn't fail an otherwise-successful job
-    // — the video and screenshots are still worth delivering. Same
-    // "don't fake it, say so honestly" principle as the old placeholder,
-    // just now covering the failure case specifically rather than
-    // always.
-    console.error(`transcription failed for session ${sessionId}:`, err);
-    await writeFile(
-      transcriptPath,
-      "Transcription failed for this video — this is a known-error case, not a fake transcript.\n\n" +
-        "Screenshots and the converted video are still included in this download.\n"
-    );
-  }
-
-  await setStatus(sessionId, "packaging");
-  const localZipPath = path.join(work, "output.zip");
-  await zipResults(work, screenshotPaths, localZipPath);
-
-  await putObjectStream(downloadZipKey(sessionId), createReadStream(localZipPath), "application/zip");
-
-  // The raw upload has no reason to survive past packaging — the B2
-  // object, not local disk, is the thing that used to be uploadDir().
-  await deleteObject(uploadObjectKey);
+  // The GPU pipeline (transcode, scene detection, transcription, zip,
+  // upload to B2) now runs entirely on RunPod Serverless — see
+  // worker/runpod-handler/handler.py. It downloads the raw upload from
+  // B2, produces downloads/<sessionId>.zip, and deletes the upload
+  // object itself; nothing local to do here anymore.
+  await runGpuPipeline(sessionId);
 
   await pool.query(
     `UPDATE sessions SET status = 'complete', expires_at = NOW() + INTERVAL '1 hour', updated_at = NOW() WHERE id = $1`,
@@ -136,11 +60,6 @@ async function processSession(sessionId: string): Promise<void> {
     // A failed notification shouldn't fail an otherwise-successful job.
     console.error(`failed to send ready email for session ${sessionId}:`, err);
   }
-
-  // Clean up all worker-local scratch — the downloaded input, ffmpeg
-  // output, and the local zip copy have no reason to survive past
-  // upload to B2.
-  await rm(work, { recursive: true, force: true });
 }
 
 // Real scheduled sweep, not the lazy-only check the download route relies
