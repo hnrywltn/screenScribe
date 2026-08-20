@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Camera, FileText, Film, Lock } from "lucide-react";
 import FeatureCard from "@/components/FeatureCard";
 import PricingCard from "@/components/PricingCard";
@@ -108,6 +109,41 @@ export default function MarketingHomePage() {
         >
           Create your account
         </Link>
+      </section>
+
+      {/* Light Patterns */}
+      <section className="border-t border-[var(--color-border)] bg-white py-14">
+        <div className="max-w-3xl mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-start sm:items-center gap-6">
+          <Image
+            src="/light-patterns-logo.png"
+            alt="Light Patterns"
+            width={1039}
+            height={647}
+            className="h-16 w-auto shrink-0"
+          />
+          <div>
+            <h2 className="text-xs uppercase tracking-widest font-medium text-[var(--color-muted)]">
+              Learn about Light Patterns
+            </h2>
+            <p className="mt-2 text-sm text-[var(--color-text)] leading-relaxed">
+              StudyBeacon is built by Light Patterns, a studio that builds software without the dark patterns — the
+              deliberate sludge other companies use to keep you confused, paying, or unable to leave. That same
+              standard shaped every choice here: pricing is a flat, plainly-stated token cost, not a subscription
+              engineered to be forgotten. Your video, screenshots, and transcript are deleted the moment your download
+              is ready — no quiet archive, no data pipeline feeding someone else&apos;s AI model. Transcription runs on
+              infrastructure we control, not a third-party API. Simple, secure, and built to earn your trust rather
+              than extract from it.
+            </p>
+            <a
+              href="https://lightpatternsonline.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-block text-sm font-medium text-[var(--color-text)] underline hover:opacity-70 transition-opacity"
+            >
+              Check out our other work →
+            </a>
+          </div>
+        </div>
       </section>
     </div>
   );
