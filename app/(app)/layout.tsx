@@ -3,6 +3,7 @@ import { getCurrentUserId } from "@/lib/auth";
 import pool from "@/lib/db";
 import Sidebar from "@/components/Sidebar";
 import UploadProvider from "@/components/UploadProvider";
+import Footer from "@/components/Footer";
 // import VerifyEmailBanner from "@/components/VerifyEmailBanner";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -27,6 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               can never actually arrive. Re-enable by uncommenting this
               and the two lines above once that's fixed. */}
           <div className="flex-1">{children}</div>
+          <Footer />
         </main>
       </div>
     </UploadProvider>
