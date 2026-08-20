@@ -28,6 +28,40 @@ export function useUpload(): UploadContextValue {
   return ctx;
 }
 
+// Polls GET /api/sessions/latest a few times, looking for a session
+// created at/after `uploadStartedAt` that isn't 'failed' — used when the
+// upload XHR itself reports a network-level error (see the "error"
+// listener below) to tell a genuinely failed upload apart from a
+// response that just never made it back to the browser (e.g. the server
+// finished the whole upload — session created, tokens charged, job
+// enqueued — but the connection was cut before the confirmation arrived,
+// which is exactly what a mid-upload server redeploy looks like).
+// Deliberately does NOT touch the non-2xx "load" branch below: a real
+// HTTP error response means the server already made a definitive
+// decision (and already called markFailed() server-side to match), so
+// there's nothing ambiguous to wait out there.
+async function recentNonFailedSessionExists(uploadStartedAt: number): Promise<boolean> {
+  const attempts = 4;
+  const delayMs = 2000;
+  for (let i = 0; i < attempts; i++) {
+    await new Promise((r) => setTimeout(r, delayMs));
+    try {
+      const res = await fetch("/api/sessions/latest");
+      if (res.ok) {
+        const { session } = (await res.json()) as {
+          session: { id: string; status: string; createdAt: string } | null;
+        };
+        if (session && new Date(session.createdAt).getTime() >= uploadStartedAt - 5000 && session.status !== "failed") {
+          return true;
+        }
+      }
+    } catch {
+      // Network still shaky — just try again on the next iteration.
+    }
+  }
+  return false;
+}
+
 // Mounted in app/(app)/layout.tsx, above {children} — that layout shell
 // doesn't unmount when navigating within (app)/ (only children does),
 // so an upload started from /upload keeps running, stays cancelable,
@@ -36,6 +70,7 @@ export function useUpload(): UploadContextValue {
 export default function UploadProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const uploadStartedAtRef = useRef<number>(0);
   const [activeUpload, setActiveUpload] = useState<ActiveUpload | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +83,7 @@ export default function UploadProvider({ children }: { children: React.ReactNode
       }
       setError(null);
       setActiveUpload({ filename: file.name, progress: 0 });
+      uploadStartedAtRef.current = Date.now();
 
       const xhr = new XMLHttpRequest();
       xhrRef.current = xhr;
@@ -74,8 +110,19 @@ export default function UploadProvider({ children }: { children: React.ReactNode
       });
       xhr.addEventListener("error", () => {
         xhrRef.current = null;
-        setActiveUpload(null);
-        setError("Upload failed — check your connection and try again.");
+        // Keep showing the in-progress state (not a failure yet) while
+        // checking whether the upload actually made it through server-side
+        // despite this network-level error — see recentNonFailedSessionExists.
+        setActiveUpload({ filename: file.name, progress: 100 });
+        const startedAt = uploadStartedAtRef.current;
+        recentNonFailedSessionExists(startedAt).then((succeeded) => {
+          setActiveUpload(null);
+          if (succeeded) {
+            router.refresh();
+          } else {
+            setError("Upload failed — check your connection and try again.");
+          }
+        });
       });
       // Fires on xhr.abort() (cancelUpload below) — deliberately no
       // error message here, a user-initiated cancel isn't a failure.
