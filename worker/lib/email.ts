@@ -1,3 +1,5 @@
+import { renderEmailHtml, emailButton } from "./emailTemplate";
+
 const RESEND_API_URL = "https://api.resend.com/emails";
 // Resend's shared test sender — works without a verified custom domain,
 // but only delivers to the Resend account's own verified address. Swap
@@ -8,6 +10,14 @@ export async function sendDownloadReadyEmail(to: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const downloadUrl = `${appUrl}/sessions`;
+
+  const html = renderEmailHtml({
+    heading: "Your video is ready",
+    bodyHtml:
+      `<p style="margin:0 0 16px;">Your video has finished processing.</p>` +
+      emailButton(downloadUrl, "Download it here") +
+      `<p style="margin:16px 0 0;font-size:13px;color:#7a8c88;">This link stays available for 1 hour.</p>`,
+  });
 
   if (!apiKey) {
     console.log(`[email] RESEND_API_KEY not set — would have emailed ${to}: your download is ready`);
@@ -24,7 +34,7 @@ export async function sendDownloadReadyEmail(to: string): Promise<void> {
       from: FROM_ADDRESS,
       to,
       subject: "Your StudyBeacon download is ready",
-      html: `<p>Your video has finished processing. <a href="${downloadUrl}">Download it here</a> — this link stays available for 1 hour.</p>`,
+      html,
     }),
   });
 
