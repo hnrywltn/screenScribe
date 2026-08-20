@@ -76,4 +76,7 @@ CREATE INDEX IF NOT EXISTS rate_limit_attempts_key_action_created_idx
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;
 
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMPTZ;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ;
+
 COMMIT;
