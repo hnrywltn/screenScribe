@@ -24,6 +24,7 @@ export async function POST(request: Request) {
   const firstName = typeof body.firstName === "string" ? body.firstName.trim() : "";
   const lastName = typeof body.lastName === "string" ? body.lastName.trim() : "";
   const phoneRaw = typeof body.phone === "string" ? body.phone.trim() : "";
+  const smsOptInRaw = body.smsOptIn === true;
 
   if (!EMAIL_RE.test(email)) {
     return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
@@ -48,6 +49,11 @@ export async function POST(request: Request) {
     }
     phone = phoneRaw;
   }
+  // Consent only means something if there's a number to text — checking
+  // the box with no phone number entered is a no-op, not an error, since
+  // the checkbox sits right below an optional field with no dependency
+  // enforced between them in the UI.
+  const smsOptIn = smsOptInRaw && phone !== null;
 
   const passwordHash = await hashPassword(password);
 
@@ -57,8 +63,8 @@ export async function POST(request: Request) {
 
   try {
     const { rows } = await pool.query<{ id: string }>(
-      `INSERT INTO users (email, password_hash, phone, first_name, last_name) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [email, passwordHash, phone, firstName, lastName]
+      `INSERT INTO users (email, password_hash, phone, first_name, last_name, sms_opt_in) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [email, passwordHash, phone, firstName, lastName, smsOptIn]
     );
     await createSession(rows[0].id);
 

@@ -26,11 +26,12 @@ export default function SignupForm() {
     const firstName = String(formData.get("firstName") ?? "");
     const lastName = String(formData.get("lastName") ?? "");
     const phone = String(formData.get("phone") ?? "");
+    const smsOptIn = formData.get("smsOptIn") === "on";
 
     const res = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, firstName, lastName, phone }),
+      body: JSON.stringify({ email, password, firstName, lastName, phone, smsOptIn }),
     });
     const data = await res.json();
 
@@ -93,6 +94,28 @@ export default function SignupForm() {
           Phone number <span className="text-[var(--color-muted)] font-normal">(optional)</span>
         </label>
         <input id="phone" name="phone" type="tel" autoComplete="tel" className={inputClass} />
+      </div>
+
+      <div className="flex items-start gap-2">
+        <input
+          id="smsOptIn"
+          name="smsOptIn"
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 rounded border-[var(--color-border)]"
+        />
+        <label htmlFor="smsOptIn" className="text-xs text-[var(--color-muted)] leading-relaxed">
+          Yes, text me at the number above when my upload starts processing and when it&apos;s ready to download. Up
+          to 2 messages per video. Message and data rates may apply. Reply HELP for help, STOP to cancel anytime.
+          See our{" "}
+          <Link href="/terms" className="underline hover:text-[var(--color-text)]">
+            Terms of Service
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="underline hover:text-[var(--color-text)]">
+            Privacy Policy
+          </Link>
+          .
+        </label>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

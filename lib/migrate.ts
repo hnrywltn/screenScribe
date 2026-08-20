@@ -254,6 +254,16 @@ async function migrate() {
       ALTER TABLE sessions ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ
     `);
 
+    // SMS notifications (2026-08-20) — opt-in only (TCPA requires
+    // affirmative consent, unlike email). Defaults FALSE so an existing
+    // row with a phone number already on file (collected before this
+    // column existed) isn't silently treated as opted in. Only
+    // meaningful when phone IS NOT NULL, but not enforced with a CHECK —
+    // same "validate at the app layer" convention as account_status.
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_opt_in BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+
     await client.query("COMMIT");
     console.log("Migration complete.");
   } catch (err) {
