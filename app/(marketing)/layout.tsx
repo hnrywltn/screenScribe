@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getCurrentUserId } from "@/lib/auth";
+import Footer from "@/components/Footer";
 
 export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
   const userId = await getCurrentUserId();
@@ -32,6 +33,7 @@ export default async function MarketingLayout({ children }: { children: React.Re
         )}
       </header>
       <main className="flex-1">{children}</main>
+      <Footer />
     </div>
   );
 }

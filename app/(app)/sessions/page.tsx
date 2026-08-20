@@ -7,6 +7,7 @@ import AutoRefresh from "@/components/AutoRefresh";
 import ExtendSessionButton from "@/components/ExtendSessionButton";
 import ActiveUploadRow from "@/components/ActiveUploadRow";
 import SessionStageProgress from "@/components/SessionStageProgress";
+import SessionMeta from "@/components/SessionMeta";
 
 const STATUS_LABEL: Record<string, string> = {
   queued: "Queued",
@@ -25,8 +26,18 @@ export default async function SessionsPage() {
   const userId = await getCurrentUserId();
   if (!userId) redirect("/login"); // (app)/layout.tsx already gates this — defensive
 
+  // LEFT JOIN, not a subquery — at most one usage_upload grant exists
+  // per session (chargeTokens() is called once per upload), so a plain
+  // join can't duplicate rows here. ABS() since usage charges are stored
+  // negative (see lib/tokens.ts) but the Sessions page wants to show a
+  // plain "12 tokens" cost, not "-12".
   const { rows: sessions } = await pool.query(
-    `SELECT id, original_filename, status, created_at, expires_at, extended FROM sessions WHERE user_id = $1 ORDER BY created_at DESC`,
+    `SELECT s.id, s.original_filename, s.status, s.created_at, s.expires_at, s.extended,
+            s.processing_started_at, s.processed_at, ABS(tg.tokens) AS cost_tokens
+     FROM sessions s
+     LEFT JOIN token_grants tg ON tg.session_id = s.id AND tg.source = 'usage_upload'
+     WHERE s.user_id = $1
+     ORDER BY s.created_at DESC`,
     [userId]
   );
 
@@ -53,10 +64,14 @@ export default async function SessionsPage() {
               <div className="min-w-0">
                 <p className="font-medium text-[var(--color-text)] truncate">{s.original_filename}</p>
                 <p className="text-xs text-[var(--color-muted)]">
-                  {new Date(s.created_at).toLocaleString()}
-                  {s.status === "complete" && s.expires_at && (
-                    <> · Ready — download by {new Date(s.expires_at).toLocaleTimeString()}</>
-                  )}
+                  <SessionMeta
+                    createdAt={new Date(s.created_at).toISOString()}
+                    status={s.status}
+                    expiresAt={s.expires_at ? new Date(s.expires_at).toISOString() : null}
+                    processingStartedAt={s.processing_started_at ? new Date(s.processing_started_at).toISOString() : null}
+                    processedAt={s.processed_at ? new Date(s.processed_at).toISOString() : null}
+                    costTokens={s.cost_tokens !== null ? Number(s.cost_tokens) : null}
+                  />
                 </p>
                 <SessionStageProgress status={s.status} />
               </div>

@@ -19,21 +19,25 @@ type ProcessSessionJob = {
 const QUEUE_PROCESS_SESSION = "process-session";
 const QUEUE_CLEANUP = "cleanup-expired-sessions";
 
-// sessions.status is plain TEXT with no CHECK constraint specifically so
-// values could be added/changed without a migration — see CLAUDE.md
-// "Decided: pipeline orchestration". Used to carry granular per-stage
-// values (transcoding/detecting_scenes/transcribing/packaging) driving
-// the Sessions page's animated stepper (SessionStageProgress.tsx); now
-// that the pipeline runs as one opaque RunPod job (see processSession
-// below), there's no visibility into which internal step it's on, so it
-// stays "processing" for the whole duration instead — a real, known
-// regression in that stepper's granularity, not an oversight.
-async function setStatus(sessionId: string, status: string): Promise<void> {
-  await pool.query(`UPDATE sessions SET status = $2, updated_at = NOW() WHERE id = $1`, [sessionId, status]);
-}
-
 async function processSession(sessionId: string): Promise<void> {
-  await setStatus(sessionId, "processing");
+  // sessions.status is plain TEXT with no CHECK constraint specifically
+  // so values could be added/changed without a migration — see CLAUDE.md
+  // "Decided: pipeline orchestration". Used to carry granular per-stage
+  // values (transcoding/detecting_scenes/transcribing/packaging) driving
+  // the Sessions page's animated stepper (SessionStageProgress.tsx); now
+  // that the pipeline runs as one opaque RunPod job (see runGpuPipeline
+  // below), there's no visibility into which internal step it's on, so
+  // it stays "processing" for the whole duration instead — a real,
+  // known regression in that stepper's granularity, not an oversight.
+  //
+  // processing_started_at, not updated_at — updated_at gets overwritten
+  // by every later transition (complete -> downloaded -> expired), so it
+  // can't be trusted to still hold this moment by the time the Sessions
+  // page reads it to show "processed in Nm Ns".
+  await pool.query(
+    `UPDATE sessions SET status = 'processing', processing_started_at = NOW(), updated_at = NOW() WHERE id = $1`,
+    [sessionId]
+  );
 
   const { rows } = await pool.query<{ email: string }>(
     `SELECT u.email FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = $1`,
@@ -50,7 +54,7 @@ async function processSession(sessionId: string): Promise<void> {
   await runGpuPipeline(sessionId);
 
   await pool.query(
-    `UPDATE sessions SET status = 'complete', expires_at = NOW() + INTERVAL '1 hour', updated_at = NOW() WHERE id = $1`,
+    `UPDATE sessions SET status = 'complete', expires_at = NOW() + INTERVAL '1 hour', processed_at = NOW(), updated_at = NOW() WHERE id = $1`,
     [sessionId]
   );
 

@@ -238,6 +238,22 @@ async function migrate() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ
     `);
 
+    // Sessions page shows how long a video actually took to process
+    // (2026-08-19) — can't derive that from updated_at, which keeps
+    // getting overwritten by every later status transition (complete ->
+    // downloaded -> expired), so it can't be trusted to still hold the
+    // "just finished processing" moment by the time someone looks at the
+    // page. Both nullable — NULL until the corresponding transition
+    // actually happens, and processing_started_at alone (no
+    // processed_at yet) is exactly how the Sessions page tells "still
+    // processing" from "processing took N time" apart.
+    await client.query(`
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMPTZ
+    `);
+    await client.query(`
+      ALTER TABLE sessions ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ
+    `);
+
     await client.query("COMMIT");
     console.log("Migration complete.");
   } catch (err) {
