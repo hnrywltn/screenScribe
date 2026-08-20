@@ -7,6 +7,7 @@ import pool from "./lib/db";
 import { downloadZipKey, deleteObject } from "./lib/b2";
 import { runGpuPipeline } from "./lib/runpod";
 import { sendDownloadReadyEmail } from "./lib/email";
+import { sendDownloadReadySms } from "./lib/sms";
 import { refundUsageCharge } from "./lib/tokens";
 
 // A session row already carries user_id/original_filename/status in
@@ -39,12 +40,12 @@ async function processSession(sessionId: string): Promise<void> {
     [sessionId]
   );
 
-  const { rows } = await pool.query<{ email: string }>(
-    `SELECT u.email FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = $1`,
+  const { rows } = await pool.query<{ email: string; phone: string | null; sms_opt_in: boolean }>(
+    `SELECT u.email, u.phone, u.sms_opt_in FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = $1`,
     [sessionId]
   );
   if (rows.length === 0) throw new Error(`session ${sessionId} not found`);
-  const userEmail = rows[0].email;
+  const { email: userEmail, phone: userPhone, sms_opt_in: smsOptIn } = rows[0];
 
   // The GPU pipeline (transcode, scene detection, transcription, zip,
   // upload to B2) now runs entirely on RunPod Serverless — see
@@ -63,6 +64,14 @@ async function processSession(sessionId: string): Promise<void> {
   } catch (err) {
     // A failed notification shouldn't fail an otherwise-successful job.
     console.error(`failed to send ready email for session ${sessionId}:`, err);
+  }
+
+  if (smsOptIn && userPhone) {
+    try {
+      await sendDownloadReadySms(userPhone);
+    } catch (err) {
+      console.error(`failed to send ready sms for session ${sessionId}:`, err);
+    }
   }
 }
 

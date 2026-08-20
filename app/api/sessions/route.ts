@@ -13,6 +13,7 @@ import { scratchDir } from "@/lib/tempStorage";
 import { probeDurationSeconds } from "@/lib/ffprobe";
 import { chargeTokens, refundUsageCharge } from "@/lib/tokens";
 import { putObjectStream, deleteObject, uploadKey } from "@/lib/b2";
+import { sendUploadReceivedSms } from "@/lib/sms";
 
 const MAX_SIZE_BYTES = 6 * 1024 * 1024 * 1024; // 6GB — headroom above the ~5GB real-world ceiling; matches the client-side check
 const MAX_SIZE_MESSAGE = "That file is too large — max 6GB for now.";
@@ -149,6 +150,20 @@ export async function POST(request: Request) {
 
   try {
     await sendProcessSessionJob(sessionId);
+
+    const { rows: smsRows } = await pool.query<{ phone: string | null; sms_opt_in: boolean }>(
+      `SELECT phone, sms_opt_in FROM users WHERE id = $1`,
+      [userId]
+    );
+    if (smsRows[0]?.sms_opt_in && smsRows[0].phone) {
+      try {
+        await sendUploadReceivedSms(smsRows[0].phone);
+      } catch (smsErr) {
+        // A failed notification shouldn't fail an otherwise-successful upload.
+        console.error(`failed to send upload-received sms for session ${sessionId}:`, smsErr);
+      }
+    }
+
     return NextResponse.json({ ok: true, sessionId });
   } catch (err) {
     // Tokens were already charged above — refund them, since the job
