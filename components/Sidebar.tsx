@@ -7,6 +7,7 @@ const BASE_NAV = [
   { label: "Home", href: "/dashboard", tour: "nav-home" },
   { label: "Sessions", href: "/sessions", tour: "nav-sessions" },
   { label: "Billing", href: "/billing", tour: "nav-billing" },
+  { label: "Account", href: "/account", tour: "nav-account" },
 ];
 
 export default function Sidebar({ isAdmin = false, tokenBalance = 0 }: { isAdmin?: boolean; tokenBalance?: number }) {
