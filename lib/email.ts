@@ -71,3 +71,40 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
     console.error(`[email] Resend API error (${res.status}):`, await res.text());
   }
 }
+
+export async function sendReceiptEmail(
+  to: string,
+  opts: { tokens: number; amountCents: number; kind: "pack" | "subscription" }
+): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const amount = (opts.amountCents / 100).toFixed(2);
+  const subject =
+    opts.kind === "subscription" ? "Your StudyBeacon subscription receipt" : "Your StudyBeacon purchase receipt";
+  const description =
+    opts.kind === "subscription"
+      ? `Your StudyBeacon subscription renewed: $${amount} for ${opts.tokens} tokens.`
+      : `Thanks for your purchase: $${amount} for ${opts.tokens} tokens.`;
+
+  if (!apiKey) {
+    console.log(`[email] RESEND_API_KEY not set — would have emailed ${to} a receipt: ${description}`);
+    return;
+  }
+
+  const res = await fetch(RESEND_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: FROM_ADDRESS,
+      to,
+      subject,
+      html: `<p>${description}</p>`,
+    }),
+  });
+
+  if (!res.ok) {
+    console.error(`[email] Resend API error (${res.status}):`, await res.text());
+  }
+}

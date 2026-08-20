@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import pool from "@/lib/db";
 import stripe from "@/lib/stripe";
+import { sendReceiptEmail } from "@/lib/email";
 
 const SUBSCRIPTION_TOKENS_PER_MONTH = 100;
 
@@ -39,6 +40,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ received: true, duplicate: true });
     }
 
+    // Captured during the grant below, sent only after COMMIT succeeds —
+    // a failed receipt email should never roll back a real token grant.
+    let receipt: { to: string; tokens: number; amountCents: number; kind: "pack" | "subscription" } | null = null;
+
     switch (event.type) {
       case "payment_intent.succeeded": {
         const pi = event.data.object as Stripe.PaymentIntent;
@@ -57,7 +62,13 @@ export async function POST(request: Request) {
           `INSERT INTO token_grants (user_id, tokens, amount_cents, source, stripe_reference) VALUES ($1, $2, $3, 'pay_as_you_go', $4)`,
           [userId, tokens, pi.amount, pi.id]
         );
-        await client.query(`UPDATE users SET token_balance = token_balance + $2 WHERE id = $1`, [userId, tokens]);
+        const { rows: piRows } = await client.query<{ email: string }>(
+          `UPDATE users SET token_balance = token_balance + $2 WHERE id = $1 RETURNING email`,
+          [userId, tokens]
+        );
+        if (piRows[0]) {
+          receipt = { to: piRows[0].email, tokens, amountCents: pi.amount, kind: "pack" };
+        }
         break;
       }
 
@@ -73,9 +84,10 @@ export async function POST(request: Request) {
         const priceId = typeof priceRef === "string" ? priceRef : priceRef?.id;
         if (priceId !== process.env.STRIPE_SUBSCRIPTION_PRICE_ID) break; // future-proofing against a second price
 
-        const { rows } = await client.query<{ id: string }>(`SELECT id FROM users WHERE stripe_customer_id = $1`, [
-          customerId,
-        ]);
+        const { rows } = await client.query<{ id: string; email: string }>(
+          `SELECT id, email FROM users WHERE stripe_customer_id = $1`,
+          [customerId]
+        );
         if (rows.length === 0) break;
         const userId = rows[0].id;
 
@@ -87,6 +99,12 @@ export async function POST(request: Request) {
           userId,
           SUBSCRIPTION_TOKENS_PER_MONTH,
         ]);
+        receipt = {
+          to: rows[0].email,
+          tokens: SUBSCRIPTION_TOKENS_PER_MONTH,
+          amountCents: invoice.amount_paid,
+          kind: "subscription",
+        };
         break;
       }
 
@@ -108,6 +126,17 @@ export async function POST(request: Request) {
     }
 
     await client.query("COMMIT");
+
+    if (receipt) {
+      // Best-effort — a failed receipt email shouldn't turn into a 500
+      // that makes Stripe retry a webhook whose grant already committed.
+      try {
+        await sendReceiptEmail(receipt.to, receipt);
+      } catch (err) {
+        console.error("failed to send receipt email:", err);
+      }
+    }
+
     return NextResponse.json({ received: true });
   } catch (err) {
     await client.query("ROLLBACK");
